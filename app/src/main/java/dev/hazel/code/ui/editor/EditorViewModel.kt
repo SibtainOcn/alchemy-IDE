@@ -69,8 +69,15 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         keyOrder = prefs.keyOrder(language.name)
     }
 
-    /** Undo history, with its own memory budget. See [UndoHistory]. */
-    private val history = UndoHistory()
+    /**
+     * Undo history for every file opened this session, and the current file's within it.
+     *
+     * The store lives on the view model, which the activity owns, so switching files
+     * keeps each file's history and leaving the app discards all of them. See [UndoStore]
+     * for why that lifetime is the one worth having.
+     */
+    private val histories = UndoStore()
+    private var history = UndoHistory()
     private var savedText = ""
 
     var canUndo by mutableStateOf(false)
@@ -85,6 +92,10 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         mode = if (Language.of(target.name) == Language.MARKDOWN) ViewMode.PREVIEW else ViewMode.EDIT
         modifiers = Modifiers()
         loadKeyOrder()
+        // Until the read lands there is no buffer to undo into, and the outgoing file's
+        // history must not answer for the incoming one.
+        history = UndoHistory()
+        syncHistoryFlags()
         viewModelScope.launch {
             val binary = FileStore.looksBinary(target)
             if (binary) {
@@ -98,6 +109,9 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                 .onSuccess { text ->
                     savedText = text
                     value = TextFieldValue(text)
+                    // Reopening a file this session picks its history back up, unless the
+                    // file has changed since, in which case the store hands back a new one.
+                    history = histories.of(target.absolutePath, text)
                     readOnly = target.length() > FileStore.EDIT_LIMIT_BYTES || !target.canWrite()
                     if (readOnly && target.length() > FileStore.EDIT_LIMIT_BYTES) {
                         message = "Large file - opened read-only"
@@ -107,7 +121,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                     readOnly = true
                     message = it.message ?: "Could not read this file"
                 }
-            history.clear(); syncHistoryFlags()
+            syncHistoryFlags()
             dirty = false
             // Same reasoning as the explorer: let the loader own at least a frame or two
             // instead of blinking.
@@ -125,8 +139,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             history.record(current, edited)
             syncHistoryFlags()
         }
-        value = edited
-        dirty = edited.text != savedText
+        commit(edited)
     }
 
     /**
@@ -147,22 +160,29 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             history.recordDiscrete(current)
             syncHistoryFlags()
         }
-        value = next
-        dirty = next.text != savedText
+        commit(next)
     }
 
     fun undo() {
         val previous = history.undo(value) ?: return
-        value = previous
-        dirty = previous.text != savedText
+        commit(previous)
         syncHistoryFlags()
     }
 
     fun redo() {
         val next = history.redo(value) ?: return
+        commit(next)
+        syncHistoryFlags()
+    }
+
+    /**
+     * Puts [next] in the buffer and tells the store what this file now holds, which is
+     * what a later reopen compares against to decide whether its history still applies.
+     */
+    private fun commit(next: TextFieldValue) {
         value = next
         dirty = next.text != savedText
-        syncHistoryFlags()
+        file?.let { histories.noteText(it.absolutePath, next.text) }
     }
 
     private fun syncHistoryFlags() {

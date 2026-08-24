@@ -157,12 +157,47 @@ class UndoHistoryTest {
     fun `the budget scales with the heap the device actually grants`() {
         // Android grants a per-app heap, not the phone's RAM: a 6 GB device commonly caps
         // an app at 128-256 MB, and allocating past that throws while RAM sits free.
-        val small = UndoHistory.budgetCharsFor(128L * 1024 * 1024)
-        val mid = UndoHistory.budgetCharsFor(256L * 1024 * 1024)
-        val large = UndoHistory.budgetCharsFor(512L * 1024 * 1024)
+        // Read below the ceiling, where the heap is what decides.
+        val small = UndoHistory.budgetCharsFor(96L * 1024 * 1024)
+        val mid = UndoHistory.budgetCharsFor(128L * 1024 * 1024)
+        val large = UndoHistory.budgetCharsFor(192L * 1024 * 1024)
 
         assertTrue("A bigger heap must buy more history", small < mid)
         assertTrue("A bigger heap must buy more history", mid < large)
+    }
+
+    @Test
+    fun `the running total is kept honest as snapshots come and go`() {
+        // The total is carried rather than summed on demand, so every path that adds or
+        // drops a snapshot has to maintain it. A total that drifts high starves the
+        // history; one that drifts low is the out-of-memory kill this class exists to
+        // prevent.
+        val h = history()
+        assertEquals(0, h.heldChars)
+
+        h.recordDiscrete(v("12345"))
+        assertEquals(5, h.heldChars)
+
+        h.undo(v("1234567"))
+        assertEquals("The undone value moved to redo, it did not vanish", 7, h.heldChars)
+
+        h.redo(v("12345"))
+        assertEquals(5, h.heldChars)
+
+        h.clear()
+        assertEquals(0, h.heldChars)
+    }
+
+    @Test
+    fun `clearing the redo stack gives its memory back`() {
+        val h = history()
+        h.recordDiscrete(v("abcd"))
+        h.undo(v("abcdefgh"))
+        assertEquals(8, h.heldChars)
+
+        // A fresh edit invalidates the redo branch; its snapshots must stop being counted.
+        h.recordDiscrete(v("xy"))
+        assertEquals(2, h.heldChars)
     }
 
     @Test
@@ -179,7 +214,7 @@ class UndoHistoryTest {
     fun `the budget is clamped at both ends`() {
         // A tiny or absurd heap reading must not produce a useless or reckless budget.
         assertEquals(4_000_000, UndoHistory.budgetCharsFor(1024))
-        assertEquals(32_000_000, UndoHistory.budgetCharsFor(64L * 1024 * 1024 * 1024))
+        assertEquals(12_000_000, UndoHistory.budgetCharsFor(64L * 1024 * 1024 * 1024))
     }
 
     @Test

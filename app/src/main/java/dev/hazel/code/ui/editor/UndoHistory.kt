@@ -28,10 +28,17 @@ class UndoHistory(
     companion object {
         /** Never squander a big heap, and never assume one. */
         private const val FLOOR_CHARS = 4_000_000      // 8 MB of UTF-16
-        private const val CEILING_CHARS = 32_000_000   // 64 MB of UTF-16
+        private const val CEILING_CHARS = 12_000_000   // 24 MB of UTF-16
 
-        /** The share of the app heap undo history is allowed to occupy. */
-        private const val HEAP_SHARE = 0.15
+        /**
+         * The share of the app heap undo history is allowed to occupy.
+         *
+         * A tenth rather than a sixth, because history is not the only copy of the file
+         * in memory: the buffer itself, the layout Compose builds from it and the styled
+         * spans the highlighter produces are all live at the same time, and on a large
+         * file each of those is the size of the document again.
+         */
+        private const val HEAP_SHARE = 0.10
 
         /**
          * How much history this device can afford.
@@ -54,18 +61,25 @@ class UndoHistory(
     private val undo = ArrayDeque<TextFieldValue>()
     private val redo = ArrayDeque<TextFieldValue>()
     private var lastPushAt = 0L
+    private var held = 0
 
     val canUndo: Boolean get() = undo.isNotEmpty()
     val canRedo: Boolean get() = redo.isNotEmpty()
 
-    /** Total characters held across both stacks. Exposed for tests and diagnostics. */
-    val heldChars: Int get() = undo.sumOf { it.text.length } + redo.sumOf { it.text.length }
+    /**
+     * Total characters held across both stacks. Exposed for tests and diagnostics.
+     *
+     * Carried as a running total rather than summed when asked: the budget is checked on
+     * every push, and summing walks the whole history to answer what two additions can.
+     */
+    val heldChars: Int get() = held
 
     val depth: Int get() = undo.size
 
     fun clear() {
         undo.clear()
         redo.clear()
+        held = 0
         lastPushAt = 0L
     }
 
@@ -81,45 +95,53 @@ class UndoHistory(
         val stale = at - lastPushAt > coalesceWindowMs
 
         if (undo.isEmpty() || stale || bigChange || newLine) {
-            undo.addLast(previous)
+            pushUndo(previous)
             enforceBudget()
         }
         lastPushAt = at
-        redo.clear()
+        clearRedo()
     }
 
     /** Records a restore point unconditionally - used for whole operations, not typing. */
     fun recordDiscrete(previous: TextFieldValue) {
-        undo.addLast(previous)
-        redo.clear()
+        pushUndo(previous)
+        clearRedo()
         enforceBudget()
         lastPushAt = 0L
     }
 
     /** Returns the value to restore, or null when there is nothing to undo. */
     fun undo(current: TextFieldValue): TextFieldValue? {
-        val previous = undo.removeLastOrNull() ?: return null
-        redo.addLast(current)
+        val previous = popUndo() ?: return null
+        pushRedo(current)
         enforceBudget()
         lastPushAt = 0L
         return previous
     }
 
     fun redo(current: TextFieldValue): TextFieldValue? {
-        val next = redo.removeLastOrNull() ?: return null
-        undo.addLast(current)
+        val next = popRedo() ?: return null
+        pushUndo(current)
         enforceBudget()
         lastPushAt = 0L
         return next
     }
 
+    private fun pushUndo(v: TextFieldValue) { undo.addLast(v); held += v.text.length }
+    private fun pushRedo(v: TextFieldValue) { redo.addLast(v); held += v.text.length }
+    private fun popUndo(): TextFieldValue? = undo.removeLastOrNull()?.also { held -= it.text.length }
+    private fun popRedo(): TextFieldValue? = redo.removeLastOrNull()?.also { held -= it.text.length }
+    private fun clearRedo() {
+        redo.forEach { held -= it.text.length }
+        redo.clear()
+    }
+
     private fun enforceBudget() {
-        while (undo.size > maxEntries) undo.removeFirst()
-        while (redo.size > maxEntries) redo.removeFirst()
+        while (undo.size > maxEntries) held -= undo.removeFirst().text.length
+        while (redo.size > maxEntries) held -= redo.removeFirst().text.length
 
         // Drop the oldest restore points until the budget is met, but never go below the
         // minimum depth - one undo on a huge file is worth the memory.
-        var held = heldChars
         while (held > maxChars && undo.size > minEntries) {
             held -= undo.removeFirst().text.length
         }
