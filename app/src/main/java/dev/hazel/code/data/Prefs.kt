@@ -36,6 +36,14 @@ class Prefs(context: Context) {
         get() = sp.getInt("font_sp", 15)
         set(v) = sp.edit { putInt("font_sp", v) }
 
+    /**
+     * Markdown preview zoom, as a percentage. Kept apart from [fontSizeSp]: the size that
+     * suits editing source is not the size that suits reading a rendered page.
+     */
+    var previewZoomPct: Int
+        get() = sp.getInt("preview_zoom", 100)
+        set(v) = sp.edit { putInt("preview_zoom", v) }
+
     var lineNumbers: Boolean
         get() = sp.getBoolean("line_numbers", true)
         set(v) = sp.edit { putBoolean("line_numbers", v) }

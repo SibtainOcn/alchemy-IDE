@@ -193,4 +193,73 @@ class KeyBarModelTest {
             assertEquals("Duplicate key id in $lang", ids.size, ids.toSet().size)
         }
     }
+
+    // ---- Dragging a key ----
+
+    /** Even slots: a 40 px key and a 6 px gap, so every crossing costs 46 px. */
+    private val evenWidths = List(10) { 40f }
+    private val gap = 6f
+
+    @Test
+    fun `a short pull does not move a key at all`() {
+        val drop = KeyBarModel.dropTarget(evenWidths, from = 3, dx = 20f, gap = gap)
+        assertEquals(3, drop.index)
+        assertEquals(20f, drop.residual, 0.01f)
+    }
+
+    @Test
+    fun `one long pull crosses every key it reaches, not just the first`() {
+        // This is the bug the drag had: a swap per gesture rather than a drop anywhere.
+        val drop = KeyBarModel.dropTarget(evenWidths, from = 0, dx = 46f * 5, gap = gap)
+        assertEquals(5, drop.index)
+    }
+
+    @Test
+    fun `a pull backwards crosses just as far`() {
+        val drop = KeyBarModel.dropTarget(evenWidths, from = 8, dx = -46f * 4, gap = gap)
+        assertEquals(4, drop.index)
+    }
+
+    @Test
+    fun `the leftover keeps the key under the finger rather than under its slot`() {
+        // Half a slot past the third crossing: the key has taken slot 3 and is still
+        // holding a slot's half-width of travel, which is where the finger is.
+        val drop = KeyBarModel.dropTarget(evenWidths, from = 0, dx = 46f * 3 + 20f, gap = gap)
+        assertEquals(3, drop.index)
+        assertEquals(20f, drop.residual, 0.01f)
+    }
+
+    @Test
+    fun `a key cannot be dragged off either end`() {
+        assertEquals(0, KeyBarModel.dropTarget(evenWidths, 0, -5000f, gap).index)
+        assertEquals(
+            evenWidths.lastIndex,
+            KeyBarModel.dropTarget(evenWidths, evenWidths.lastIndex, 5000f, gap).index,
+        )
+    }
+
+    @Test
+    fun `uneven keys are crossed by their own widths`() {
+        // The bar is a mix of 'ctrl' and '#'. A drag that clears a wide key must not be
+        // measured against a narrow one, or the key lands short of the finger.
+        val widths = listOf(30f, 120f, 30f, 30f)
+        assertEquals(0, KeyBarModel.dropTarget(widths, 0, 40f, gap).index)
+        assertEquals(1, KeyBarModel.dropTarget(widths, 0, 80f, gap).index)
+        assertEquals(2, KeyBarModel.dropTarget(widths, 0, 150f, gap).index)
+    }
+
+    @Test
+    fun `an unmeasured row leaves the order alone`() {
+        // Widths arrive a frame after the first layout; until then nothing should move.
+        assertEquals(2, KeyBarModel.dropTarget(List(5) { 0f }, 2, 400f, gap = 0f).index)
+    }
+
+    @Test
+    fun `reorder moves a key without dropping or duplicating any other`() {
+        val keys = KeyBarModel.defaultKeys(Language.PYTHON)
+        val moved = KeyBarModel.reorder(keys, 0, keys.lastIndex)
+        assertEquals(keys.size, moved.size)
+        assertEquals(keys.toSet(), moved.toSet())
+        assertEquals(keys[0], moved.last())
+    }
 }

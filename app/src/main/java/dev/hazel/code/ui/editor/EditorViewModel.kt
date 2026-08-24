@@ -45,6 +45,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var fontSizeSp by mutableStateOf(prefs.fontSizeSp)
         private set
+    var previewZoomPct by mutableStateOf(prefs.previewZoomPct)
+        private set
 
     val language: Language get() = file?.let { Language.of(it.name) } ?: Language.PLAIN
 
@@ -234,5 +236,17 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         prefs.fontSizeSp = fontSizeSp
     }
 
+    /** Zooms the rendered preview. Steps of ten read as a zoom; single percent does not. */
+    fun setPreviewZoom(pct: Int) {
+        previewZoomPct = pct.coerceIn(MIN_PREVIEW_ZOOM, MAX_PREVIEW_ZOOM)
+        prefs.previewZoomPct = previewZoomPct
+    }
+
     fun consumeMessage() { message = null }
+
+    companion object {
+        const val MIN_PREVIEW_ZOOM = 60
+        const val MAX_PREVIEW_ZOOM = 250
+        const val PREVIEW_ZOOM_STEP = 10
+    }
 }

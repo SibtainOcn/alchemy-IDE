@@ -21,11 +21,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -34,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.hazel.code.data.Language
@@ -62,7 +65,7 @@ import dev.hazel.code.ui.theme.TextMid
 private val TABLE_COLUMN_WIDTH = 168.dp
 
 @Composable
-fun MarkdownView(text: String, modifier: Modifier = Modifier) {
+fun MarkdownView(text: String, modifier: Modifier = Modifier, zoom: Float = 1f) {
     val a = LocalAccents.current
     val primary = MaterialTheme.colorScheme.primary
     val blocks = remember(text) {
@@ -72,30 +75,38 @@ fun MarkdownView(text: String, modifier: Modifier = Modifier) {
             .getOrElse { listOf(MdBlock.Paragraph(text)) }
     }
 
-    LazyColumn(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            start = 20.dp, end = 20.dp, top = 14.dp, bottom = 96.dp,
-        ),
+    // Zoom is a density change rather than a font size, so headings, code, table columns
+    // and the space between them all grow together - a page you move closer to, not one
+    // paragraph set larger inside a layout built for another size.
+    val density = LocalDensity.current
+    CompositionLocalProvider(
+        LocalDensity provides Density(density.density * zoom, density.fontScale),
     ) {
-        items(blocks.size, key = { it }) { index ->
-            when (val block = blocks[index]) {
-                is MdBlock.Heading -> HeadingBlock(block)
-                is MdBlock.Paragraph -> Text(
-                    remember(block) { inline(block.text, a, primary) },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TextMid,
-                    modifier = Modifier.padding(vertical = 5.dp),
-                )
+        LazyColumn(
+            modifier = modifier.fillMaxWidth(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                start = 20.dp, end = 20.dp, top = 14.dp, bottom = 96.dp,
+            ),
+        ) {
+            items(blocks.size, key = { it }) { index ->
+                when (val block = blocks[index]) {
+                    is MdBlock.Heading -> HeadingBlock(block)
+                    is MdBlock.Paragraph -> Text(
+                        remember(block) { inline(block.text, a, primary) },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextMid,
+                        modifier = Modifier.padding(vertical = 5.dp),
+                    )
 
-                is MdBlock.Code -> CodeBlock(block)
-                is MdBlock.Table -> TableBlock(block)
-                is MdBlock.Item -> ItemBlock(block)
-                is MdBlock.Quote -> QuoteBlock(block)
-                MdBlock.Rule -> {
-                    Spacer(Modifier.height(14.dp))
-                    Box(Modifier.fillMaxWidth().height(0.7.dp).background(Hairline))
-                    Spacer(Modifier.height(14.dp))
+                    is MdBlock.Code -> CodeBlock(block)
+                    is MdBlock.Table -> TableBlock(block)
+                    is MdBlock.Item -> ItemBlock(block)
+                    is MdBlock.Quote -> QuoteBlock(block)
+                    MdBlock.Rule -> {
+                        Spacer(Modifier.height(14.dp))
+                        Box(Modifier.fillMaxWidth().height(0.7.dp).background(Hairline))
+                        Spacer(Modifier.height(14.dp))
+                    }
                 }
             }
         }

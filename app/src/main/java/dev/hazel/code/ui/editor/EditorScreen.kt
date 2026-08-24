@@ -193,7 +193,8 @@ fun EditorScreen(
                         vm.message ?: "It is not text, or it is not readable.",
                         Ico.Info,
                     )
-                    mode == ViewMode.PREVIEW -> MarkdownView(vm.value.text, Modifier.fillMaxSize())
+                    mode == ViewMode.PREVIEW ->
+                        MarkdownView(vm.value.text, Modifier.fillMaxSize(), vm.previewZoomPct / 100f)
                     else -> CodeField(
                         value = vm.value,
                         onValueChange = vm::onValueChange,
@@ -407,34 +408,61 @@ private fun EditorMenu(
         MenuRow(Ico.Code, "Auto-pair", trailing = onOff(vm.autoPair)) { vm.toggleAutoPair() }
 
         HairlineDivider(Modifier.padding(vertical = 4.dp))
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Ico.Font, null, Modifier.size(18.dp), tint = TextMid)
-            Text(
-                "Text size",
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextHigh,
-                maxLines = 1,
-                modifier = Modifier.padding(start = 12.dp).weight(1f),
+        // Reading a rendered page and editing its source are sized by different questions,
+        // and only one of them is on screen at a time - so the row asks whichever applies.
+        if (vm.mode == ViewMode.PREVIEW) {
+            StepperRow(
+                label = "Zoom",
+                value = "${vm.previewZoomPct}%",
+                onLess = { vm.setPreviewZoom(vm.previewZoomPct - EditorViewModel.PREVIEW_ZOOM_STEP) },
+                onMore = { vm.setPreviewZoom(vm.previewZoomPct + EditorViewModel.PREVIEW_ZOOM_STEP) },
             )
-            StepButton(Ico.Minus) { vm.setFontSize(vm.fontSizeSp - 1) }
-            Text(
-                "${vm.fontSizeSp}",
-                fontFamily = CodeFont,
-                fontSize = 13.sp,
-                maxLines = 1,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.width(32.dp),
+        } else {
+            StepperRow(
+                label = "Text size",
+                value = "${vm.fontSizeSp}",
+                onLess = { vm.setFontSize(vm.fontSizeSp - 1) },
+                onMore = { vm.setFontSize(vm.fontSizeSp + 1) },
             )
-            StepButton(Ico.Plus) { vm.setFontSize(vm.fontSizeSp + 1) }
         }
 
         HairlineDivider(Modifier.padding(vertical = 4.dp))
         MenuRow(Ico.Copy, "Copy all", onClick = onCopyAll)
         MenuRow(Ico.Info, "File info", onClick = onInfo)
+    }
+}
+
+/** The menu's one adjustable value: a label, a reading, and a step either side of it. */
+@Composable
+private fun StepperRow(
+    label: String,
+    value: String,
+    onLess: () -> Unit,
+    onMore: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Ico.Font, null, Modifier.size(18.dp), tint = TextMid)
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextHigh,
+            maxLines = 1,
+            modifier = Modifier.padding(start = 12.dp).weight(1f),
+        )
+        StepButton(Ico.Minus, onClick = onLess)
+        Text(
+            value,
+            fontFamily = CodeFont,
+            fontSize = 13.sp,
+            maxLines = 1,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.width(46.dp),
+        )
+        StepButton(Ico.Plus, onClick = onMore)
     }
 }
 

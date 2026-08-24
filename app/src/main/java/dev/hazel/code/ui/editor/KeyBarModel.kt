@@ -156,6 +156,46 @@ object KeyBarModel {
         return keys.toMutableList().apply { add(to, removeAt(from)) }
     }
 
+    /** Where a dragged key lands, and how much of the drag is left once it gets there. */
+    data class Drop(val index: Int, val residual: Float)
+
+    /**
+     * Resolves a drag into a landing slot.
+     *
+     * [widths] are the laid-out widths of the keys in their current order, [from] is the
+     * slot the dragged key holds now, and [dx] is how far it has been pulled from that
+     * slot. A key takes the next slot once it has covered half of it, and that slot's
+     * width then comes off the drag - so one long pull crosses every key it reaches
+     * instead of stopping after the first.
+     *
+     * [Drop.residual] is what is left over afterwards, and is what keeps the key under
+     * the finger rather than snapping it to the slot it has just taken.
+     */
+    fun dropTarget(widths: List<Float>, from: Int, dx: Float, gap: Float): Drop {
+        if (from !in widths.indices) return Drop(from, dx)
+        var index = from
+        var left = dx
+        // One direction only, chosen by the way the finger went. Crossing a slot leaves a
+        // remainder of up to half its width pointing the other way, and a slot narrower
+        // than that on the far side would otherwise read as a crossing straight back.
+        if (dx > 0f) {
+            while (true) {
+                val step = (widths.getOrNull(index + 1) ?: break) + gap
+                if (step <= 0f || left <= step / 2f) break
+                left -= step
+                index++
+            }
+        } else {
+            while (true) {
+                val step = (widths.getOrNull(index - 1) ?: break) + gap
+                if (step <= 0f || left >= -step / 2f) break
+                left += step
+                index--
+            }
+        }
+        return Drop(index, left)
+    }
+
     /**
      * What pressing [key] does, given the current modifiers.
      *

@@ -21,6 +21,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   a phone keyboard offers.
 - **Draggable key bar.** Long-press any key and drag it into place. Saved per language; a
   saved order survives the key set changing between versions.
+- **Markdown preview zoom.** The editor menu's stepper asks the question that fits what is
+  on screen: text size while editing source, zoom while reading the rendered page. Zoom
+  runs 60-250% in steps of ten, is remembered, and scales headings, code blocks, table
+  columns and the space between them together rather than only the body text.
 - **Markdown tables**, with alignment, horizontal scroll and fixed column widths. Also
   task lists, nested and ordered lists, setext headings and backslash escapes.
 - **Test tooling.** `:app:testSummary` reports real counts from the JUnit XML;
@@ -29,6 +33,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   tests. Packaging (debug + release through R8) runs on `main`.
 
 ### Fixed
+- **A key could only be dragged one place per long-press.** Every crossing was written
+  straight back to the saved order, which rebuilt the row from a new list mid-gesture,
+  restarted the pointer input under the finger and ended the drag. A drag now runs against
+  a local order and is saved on release, so a key goes wherever it is dropped; holding it
+  against either edge scrolls the row underneath it, which is what makes the far end of
+  the bar reachable in one gesture.
 - **Line numbers flickered while editing Markdown.** The gutter read the field's current
   text against the previous frame's layout, and those disagree for a frame after every
   keystroke - so the count jumped between N and N+1. It now reads the layout's own text.
