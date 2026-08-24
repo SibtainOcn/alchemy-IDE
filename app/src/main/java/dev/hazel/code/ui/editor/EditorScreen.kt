@@ -53,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,6 +66,7 @@ import dev.hazel.code.ui.common.Ico
 import dev.hazel.code.ui.common.Motion
 import dev.hazel.code.ui.common.ShapeLoader
 import dev.hazel.code.ui.common.rememberCopyToClipboard
+import dev.hazel.code.ui.common.rememberPasteFromClipboard
 import dev.hazel.code.ui.preview.MarkdownView
 import dev.hazel.code.ui.theme.CodeFont
 import dev.hazel.code.ui.theme.InkRaised
@@ -83,6 +85,7 @@ fun EditorScreen(
 ) {
     val snackbar = remember { SnackbarHostState() }
     val copyToClipboard = rememberCopyToClipboard()
+    val pasteFromClipboard = rememberPasteFromClipboard()
 
     var menuOpen by remember { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
@@ -98,6 +101,31 @@ fun EditorScreen(
 
     fun leave() {
         if (vm.dirty) confirmExit = true else onClose()
+    }
+
+    // Text edits go straight to the view model as one undo step; the rest are things only
+    // this screen can reach — the clipboard, the save pipeline, the undo history.
+    fun handleKey(outcome: KeyOutcome) {
+        when (outcome) {
+            is KeyOutcome.Edit -> vm.apply(outcome.op)
+            is KeyOutcome.Command -> when (outcome.command) {
+                EditorCommand.SAVE -> vm.save()
+                EditorCommand.UNDO -> vm.undo()
+                EditorCommand.REDO -> vm.redo()
+                EditorCommand.COPY -> copyToClipboard(SmartEdit.selectedTextOrLine(vm.value))
+                EditorCommand.CUT -> {
+                    copyToClipboard(SmartEdit.selectedTextOrLine(vm.value))
+                    vm.apply { v ->
+                        if (v.selection.collapsed) SmartEdit.deleteLine(v)
+                        else SmartEdit.deleteSelection(v)
+                    }
+                }
+                EditorCommand.PASTE -> pasteFromClipboard { text ->
+                    vm.apply { SmartEdit.insert(it, text) }
+                }
+            }
+            KeyOutcome.None -> Unit
+        }
     }
 
     BackHandler { leave() }
@@ -186,7 +214,14 @@ fun EditorScreen(
             ) {
                 Column {
                     HairlineDivider()
-                    KeyBar(language = vm.language, onOp = vm::apply)
+                    KeyBar(
+                        language = vm.language,
+                        mods = vm.modifiers,
+                        order = vm.keyOrder,
+                        onMods = vm::updateModifiers,
+                        onOrderChange = vm::updateKeyOrder,
+                        onOutcome = ::handleKey,
+                    )
                     CaretStatus(vm)
                 }
             }
@@ -358,6 +393,10 @@ private fun EditorMenu(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RoundedCornerShape(Radii.md),
+        // A dropdown sizes itself to its widest child. Without a fixed width the text-size
+        // row's stepper was being squeezed until the label and the buttons stacked, which
+        // is what made that row look broken.
+        modifier = Modifier.width(272.dp),
     ) {
         MenuRow(Ico.Undo, "Undo", enabled = vm.canUndo) { vm.undo() }
         MenuRow(Ico.Redo, "Redo", enabled = vm.canRedo) { vm.redo() }
@@ -377,14 +416,18 @@ private fun EditorMenu(
                 "Text size",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextHigh,
+                maxLines = 1,
                 modifier = Modifier.padding(start = 12.dp).weight(1f),
             )
             StepButton(Ico.Minus) { vm.setFontSize(vm.fontSizeSp - 1) }
             Text(
                 "${vm.fontSizeSp}",
                 fontFamily = CodeFont,
+                fontSize = 13.sp,
+                maxLines = 1,
+                textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.width(28.dp).padding(horizontal = 4.dp),
+                modifier = Modifier.width(32.dp),
             )
             StepButton(Ico.Plus) { vm.setFontSize(vm.fontSizeSp + 1) }
         }

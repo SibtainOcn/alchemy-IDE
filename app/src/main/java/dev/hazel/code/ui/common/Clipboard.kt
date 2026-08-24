@@ -14,6 +14,33 @@ import kotlinx.coroutines.launch
  * The current Compose clipboard API is suspending, which does not fit a click handler, so
  * the scope is captured once here and every call site stays a one-liner.
  */
+/**
+ * Reads the clipboard and hands the text to a callback.
+ *
+ * Same shape as the copy helper and for the same reason: the read is suspending, and a
+ * key press is not.
+ */
+@Composable
+fun rememberPasteFromClipboard(): ((String) -> Unit) -> Unit {
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    return remember(clipboard, scope) {
+        fun(onText: (String) -> Unit) {
+            scope.launch {
+                // Plain text only: coercing other item types needs a Context and would
+                // paste a URI string into source code, which is never what was meant.
+                val text = clipboard.getClipEntry()
+                    ?.clipData
+                    ?.takeIf { it.itemCount > 0 }
+                    ?.getItemAt(0)
+                    ?.text
+                    ?.toString()
+                if (!text.isNullOrEmpty()) onText(text)
+            }
+        }
+    }
+}
+
 @Composable
 fun rememberCopyToClipboard(): (String) -> Unit {
     val clipboard = LocalClipboard.current

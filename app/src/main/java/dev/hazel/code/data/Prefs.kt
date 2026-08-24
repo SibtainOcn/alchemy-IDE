@@ -39,4 +39,20 @@ class Prefs(context: Context) {
     var lineNumbers: Boolean
         get() = sp.getBoolean("line_numbers", true)
         set(v) = sp.edit { putBoolean("line_numbers", v) }
+
+    /**
+     * The user's dragged key-bar order, as stable key ids.
+     *
+     * Stored per language, because the order that suits Python is not the order that
+     * suits Markdown. An empty list means "never reordered", which is what tells the bar
+     * to use its defaults.
+     */
+    fun keyOrder(language: String): List<String> =
+        sp.getString("key_order_$language", null)
+            ?.split(',')
+            ?.filter { it.isNotBlank() }
+            .orEmpty()
+
+    fun setKeyOrder(language: String, order: List<String>) =
+        sp.edit { putString("key_order_$language", order.joinToString(",")) }
 }
