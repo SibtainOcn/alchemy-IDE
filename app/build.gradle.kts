@@ -1,3 +1,5 @@
+apply(from = rootProject.file("gradle/test-summary.gradle.kts"))
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)

@@ -1,0 +1,125 @@
+name: CI
+
+# Runs on every pull request into main, and on main itself so the branch always has a
+# known-good result to compare against.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to a PR makes the previous run irrelevant; cancel it rather than pay for it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      # Compiles settings.gradle.kts and every build.gradle.kts without building anything.
+      # A syntax error or a bad plugin coordinate fails here, in seconds, with a clear
+      # message — before twenty minutes of Android tooling has run.
+      - name: Gradle script syntax
+        run: ./gradlew help --quiet
+
+      - name: Kotlin compile (app + tests)
+        run: ./gradlew :app:compileDebugKotlin :app:compileDebugUnitTestKotlin --stacktrace
+
+      - name: Android Lint
+        run: ./gradlew :app:lintDebug
+
+      - name: Unit tests
+        run: ./gradlew :app:testSummary :app:verifyTestFloor --stacktrace
+
+      # The count is read from the JUnit XML, so the number on the PR is always the number
+      # that actually ran.
+      - name: Publish test totals
+        if: always()
+        run: |
+          if [ -f app/build/test-summary.md ]; then
+            cat app/build/test-summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No test summary was produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+          retention-days: 7
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: verify
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # Release is built as well as debug: R8 shrinking is where a missing keep rule or a
+      # reflective call shows up, and that must not be discovered at tag time.
+      - name: Assemble debug and release
+        run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
+
+      - name: Report APK sizes
+        run: |
+          {
+            echo "### APK size"
+            echo
+            echo "| Variant | Size |"
+            echo "|---------|-----:|"
+            for apk in app/build/outputs/apk/*/*.apk; do
+              [ -f "$apk" ] || continue
+              size=$(du -h "$apk" | cut -f1)
+              echo "| $(basename "$apk") | $size |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: hazel-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
