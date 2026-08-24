@@ -1,0 +1,201 @@
+name: Release
+
+# Push a tag, get a release. Nothing else triggers this.
+#
+#     git tag v1.2.0 && git push origin v1.2.0
+#
+# The tag is the version: v1.2.0 builds 1.2.0 and publishes a normal release; anything
+# with a pre-release suffix (v2.0.0-beta.1) is published as a pre-release and its APKs are
+# named BETA instead of RELEASE.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build, without the leading v (e.g. 1.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history, so the release notes can be generated against the previous
+          # tag and versionCode can be derived from the commit count.
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          # Monotonic and reproducible: every commit bumps it, no manual bookkeeping.
+          VERSION_CODE=$(git rev-list --count HEAD)
+
+          if printf '%s' "$VERSION" | grep -Eqi -- '-(alpha|beta|rc)'; then
+            PRERELEASE=true
+            CHANNEL=BETA
+          else
+            PRERELEASE=false
+            CHANNEL=RELEASE
+          fi
+
+          {
+            echo "version=$VERSION"
+            echo "version_code=$VERSION_CODE"
+            echo "prerelease=$PRERELEASE"
+            echo "channel=$CHANNEL"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Building $VERSION (code $VERSION_CODE), channel $CHANNEL, prerelease $PRERELEASE"
+
+      # A release that ships failing code is worse than a late release.
+      - name: Unit tests
+        run: ./gradlew :app:testSummary :app:verifyTestFloor --stacktrace
+
+      # The keystore lives in a secret as base64 and is written to disk only for this job.
+      # If the secret is absent the build still runs and produces unsigned APKs rather
+      # than failing outright — the release is then clearly marked as unsigned.
+      - name: Decode keystore
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.HAZEL_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/hazel.keystore"
+            echo "path=$RUNNER_TEMP/hazel.keystore" >> "$GITHUB_OUTPUT"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "Keystore decoded ($(stat -c%s "$RUNNER_TEMP/hazel.keystore") bytes)."
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No HAZEL_KEYSTORE_BASE64 secret — APKs will be unsigned."
+          fi
+
+      - name: Build and package APKs
+        env:
+          HAZEL_STORE_FILE: ${{ steps.keystore.outputs.path }}
+          HAZEL_STORE_PASSWORD: ${{ secrets.HAZEL_STORE_PASSWORD }}
+          HAZEL_KEY_ALIAS: ${{ secrets.HAZEL_KEY_ALIAS }}
+          HAZEL_KEY_PASSWORD: ${{ secrets.HAZEL_KEY_PASSWORD }}
+        run: |
+          ./gradlew :app:packageReleaseApks \
+            -PversionName='${{ steps.version.outputs.version }}' \
+            -PversionCode='${{ steps.version.outputs.version_code }}' \
+            --stacktrace
+
+      - name: Compose release notes
+        id: notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SIGNED: ${{ steps.keystore.outputs.signed }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then TAG="v$VERSION"; fi
+
+          # GitHub writes the "What's Changed" list from the merged PRs since the last
+          # tag. We keep that and drop the boilerplate it appends.
+          gh api -X POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$TAG" \
+            -q .body > generated.md || echo "" > generated.md
+
+          python3 - "$TAG" <<'PY'
+          import os, re, sys
+
+          tag = sys.argv[1]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          version = os.environ["VERSION"]
+          signed = os.environ.get("SIGNED") == "true"
+
+          body = open("generated.md", encoding="utf-8").read()
+
+          # Drop everything from "New Contributors" onward, and any stray Full Changelog
+          # line: both are noise on a solo project.
+          body = re.split(r"\n#+\s*New Contributors", body)[0]
+          body = re.sub(r"\n\*\*Full Changelog\*\*.*", "", body)
+          body = body.strip()
+
+          changelog_url = f"https://github.com/{repo}/blob/{tag}/CHANGELOG.md"
+
+          header = [
+              "Install the **arm64-v8a** APK unless you know your device needs another one.",
+              "The universal APK works everywhere but is much larger.",
+              "",
+              f"Read the full changelog [here]({changelog_url}).",
+          ]
+          if not signed:
+              header += ["", "> These APKs are **unsigned** — signing secrets were not available to the build."]
+
+          out = "\n".join(header) + "\n\n" + (body if body else "## What's Changed\n\n_No merged pull requests since the last tag._")
+          open("release-notes.md", "w", encoding="utf-8").write(out + "\n")
+          print(out)
+          PY
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="v${{ steps.version.outputs.version }}"
+            git tag -f "$TAG" && git push -f origin "$TAG"
+          fi
+
+          PRERELEASE_FLAG=""
+          if [ "${{ steps.version.outputs.prerelease }}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          # Title is the bare version, matching the tag without its v.
+          gh release create "$TAG" \
+            --title "${{ steps.version.outputs.version }}" \
+            --notes-file release-notes.md \
+            $PRERELEASE_FLAG \
+            app/build/outputs/packaged/*.apk \
+            app/build/outputs/packaged/checksums.txt
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Release ${{ steps.version.outputs.version }}"
+            echo
+            echo "| Channel | Signed | Version code |"
+            echo "|---------|--------|-------------:|"
+            echo "| ${{ steps.version.outputs.channel }} | ${{ steps.keystore.outputs.signed }} | ${{ steps.version.outputs.version_code }} |"
+            echo
+            if compgen -G "app/build/outputs/packaged/*.apk" > /dev/null; then
+              echo "| APK | Size |"
+              echo "|-----|-----:|"
+              for apk in app/build/outputs/packaged/*.apk; do
+                echo "| $(basename "$apk") | $(du -h "$apk" | cut -f1) |"
+              done
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

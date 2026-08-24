@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **Release signing and packaging.** `keystore.properties` (local) or environment
+  variables (CI) drive a real `signingConfig`, so the release variant installs from
+  Android Studio's Run button and from `./gradlew assembleRelease`.
+- **Per-architecture APKs.** `arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64` and universal,
+  named `HAZEL-IDE-<CHANNEL>-v<version>-<abi>.apk` with a `checksums.txt` beside them.
+- **Tag-driven releases.** Pushing `v1.2.0` builds, signs, and publishes; a pre-release
+  suffix publishes as a pre-release and names its APKs `BETA`.
 - **Key bar modifiers.** Ctrl, Shift, Caps and Tab, pinned so they never scroll out of
   reach. Ctrl and Shift latch for one key; Caps locks. Arming Ctrl swaps the scrolling
   group for a shortcut set (save, undo, redo, select all, copy, cut, paste).
