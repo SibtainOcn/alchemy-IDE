@@ -275,8 +275,11 @@ object Highlighter {
                     word in spec.keywords -> a.keyword
                     word == "self" || word == "cls" || word == "this" -> a.selfRef
                     isDefName -> a.function
-                    word in spec.builtins -> a.builtin
+                    // A call wins over the builtin list: Monokai paints print(...) the
+                    // same green as any other invocation, and reserves cyan for names
+                    // used as types.
                     peekNonSpace(text, j) == '(' -> a.function
+                    word in spec.builtins -> a.builtin
                     // Leading capital reads as a type in every language here.
                     word.first().isUpperCase() -> a.builtin
                     else -> Color.Unspecified
