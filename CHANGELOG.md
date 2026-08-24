@@ -13,7 +13,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - **Per-architecture APKs.** `arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64` and universal,
   named `HAZEL-IDE-<CHANNEL>-v<version>-<abi>.apk` with a `checksums.txt` beside them.
 - **Tag-driven releases.** Pushing `v1.2.0` builds, signs, and publishes; a pre-release
-  suffix publishes as a pre-release and names its APKs `BETA`.
+  suffix publishes as a pre-release and names its APKs `BETA` rather than `STABLE`.
 - **Key bar modifiers.** Ctrl, Shift, Caps and Tab, pinned so they never scroll out of
   reach. Ctrl and Shift latch for one key; Caps locks. Arming Ctrl swaps the scrolling
   group for a shortcut set (save, undo, redo, select all, copy, cut, paste).

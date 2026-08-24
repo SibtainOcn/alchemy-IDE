@@ -37,7 +37,7 @@ import dev.hazel.code.ui.theme.TextLow
 import dev.hazel.code.ui.theme.TextMid
 
 /**
- * Shown when storage access is missing — on first run, and again if the grant is revoked
+ * Shown when storage access is missing - on first run, and again if the grant is revoked
  * while the app is in the background. It states plainly what is needed and why, because
  * "All files access" is a permission users are right to hesitate over.
  */
@@ -58,7 +58,8 @@ fun AccessGate(
             painter = painterResource(R.drawable.ic_hazel_bolt),
             contentDescription = null,
             modifier = Modifier.size(64.dp),
-            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(MaterialTheme.colorScheme.primary),
+            // The brand mark stays white on black; cyan is for things you can press.
+            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(TextHigh),
         )
         Spacer(Modifier.height(24.dp))
         Text(
@@ -70,7 +71,7 @@ fun AccessGate(
         Spacer(Modifier.height(10.dp))
         Text(
             "To browse folders and open your code, Android asks you to turn on " +
-                "All files access for Hazel. Nothing leaves your device — the app has no " +
+                "All files access for Hazel. Nothing leaves your device - the app has no " +
                 "network permission at all.",
             style = MaterialTheme.typography.bodyMedium,
             color = TextMid,
@@ -133,20 +134,20 @@ fun BrandSplash() {
             painter = painterResource(R.drawable.hazel_mark),
             contentDescription = "Hazel IDE",
             modifier = Modifier.size(88.dp),
-            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(MaterialTheme.colorScheme.primary),
+            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(TextHigh),
         )
         Spacer(Modifier.height(18.dp))
         Text(
             "HAZEL IDE",
             style = MaterialTheme.typography.labelMedium,
-            color = TextLow,
+            color = TextHigh,
         )
         Spacer(Modifier.height(34.dp))
         ShapeLoader(size = 22.dp)
     }
 }
 
-/** A dismissible strip for recoverable failures — a locked folder, a failed write. */
+/** A dismissible strip for recoverable failures - a locked folder, a failed write. */
 @Composable
 fun ErrorNotice(
     text: String,

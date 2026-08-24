@@ -6,7 +6,7 @@ name: Release
 #
 # The tag is the version: v1.2.0 builds 1.2.0 and publishes a normal release; anything
 # with a pre-release suffix (v2.0.0-beta.1) is published as a pre-release and its APKs are
-# named BETA instead of RELEASE.
+# named BETA instead of STABLE.
 on:
   push:
     tags:
@@ -64,7 +64,7 @@ jobs:
             CHANNEL=BETA
           else
             PRERELEASE=false
-            CHANNEL=RELEASE
+            CHANNEL=STABLE
           fi
 
           {
@@ -151,7 +151,7 @@ jobs:
               f"Read the full changelog [here]({changelog_url}).",
           ]
           if not signed:
-              header += ["", "> These APKs are **unsigned** — signing secrets were not available to the build."]
+              header += ["", "> These APKs are **unsigned** - signing secrets were not available to the build."]
 
           out = "\n".join(header) + "\n\n" + (body if body else "## What's Changed\n\n_No merged pull requests since the last tag._")
           open("release-notes.md", "w", encoding="utf-8").write(out + "\n")

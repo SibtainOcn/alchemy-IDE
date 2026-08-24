@@ -94,7 +94,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             if (binary) {
                 loading = false
                 readOnly = true
-                message = "Binary file — cannot be shown as text"
+                message = "Binary file - cannot be shown as text"
                 value = TextFieldValue("")
                 return@launch
             }
@@ -104,7 +104,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                     value = TextFieldValue(text)
                     readOnly = target.length() > FileStore.EDIT_LIMIT_BYTES || !target.canWrite()
                     if (readOnly && target.length() > FileStore.EDIT_LIMIT_BYTES) {
-                        message = "Large file — opened read-only"
+                        message = "Large file - opened read-only"
                     }
                 }
                 .onFailure {
