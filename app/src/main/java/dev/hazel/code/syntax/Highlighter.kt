@@ -445,7 +445,9 @@ object Highlighter {
                 text.startsWith("**", i) -> {
                     val end = text.indexOf("**", i + 2)
                     if (end in (i + 2) until to) {
-                        b.paint(i, end + 2, a.builtin, bold = true)
+                        // Bold is weight, not colour. Tinting it cyan made ordinary
+                        // emphasised prose look like a symbol.
+                        b.paint(i, end + 2, a.codeText, bold = true)
                         i = end + 2
                         continue
                     }

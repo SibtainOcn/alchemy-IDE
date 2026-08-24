@@ -15,17 +15,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Modifier state is the classic thing that breaks quietly — a Shift that never clears, a
- * Ctrl that stays armed after a command — so the latch rules are pinned here rather than
- * left to be discovered by a stuck keyboard.
+ * The Ctrl latch is the classic thing that breaks quietly - a modifier that stays armed
+ * after the key it was meant for - so the rule is pinned here rather than left to be
+ * discovered by a stuck keyboard.
  */
 class KeyBarModelTest {
 
     private val none = Modifiers()
 
     private fun key(id: String): BarKey =
-        (KeyBarModel.modifierKeys + KeyBarModel.ctrlKeys + KeyBarModel.defaultKeys(Language.PYTHON))
-            .first { it.id == id }
+        (KeyBarModel.ctrlKeys + KeyBarModel.defaultKeys(Language.PYTHON)).first { it.id == id }
 
     private fun press(id: String, mods: Modifiers = none, lang: Language = Language.PYTHON) =
         KeyBarModel.press(key(id), mods, lang)
@@ -36,56 +35,63 @@ class KeyBarModelTest {
     }
 
     @Test
-    fun `shift arms and disarms without editing anything`() {
-        val (outcome, armed) = press(KeyBarModel.SHIFT)
+    fun `ctrl arms and disarms without editing anything`() {
+        val (outcome, armed) = press(KeyBarModel.CTRL)
         assertTrue(outcome is KeyOutcome.None)
-        assertTrue(armed.shift)
-        assertFalse(KeyBarModel.press(key(KeyBarModel.SHIFT), armed, Language.PYTHON).second.shift)
-    }
-
-    @Test
-    fun `shift is spent by the next ordinary key`() {
-        val armed = none.copy(shift = true)
-        val (_, after) = press("sym.eq", armed)
-        assertFalse("Shift must not stay armed after a key", after.shift)
-    }
-
-    @Test
-    fun `caps survives the next key, because that is the point of a lock`() {
-        val locked = none.copy(caps = true)
-        val (_, after) = press("sym.eq", locked)
-        assertTrue(after.caps)
+        assertTrue(armed.ctrl)
+        assertFalse(press(KeyBarModel.CTRL, armed).second.ctrl)
     }
 
     @Test
     fun `ctrl clears once a shortcut has run`() {
-        val armed = none.copy(ctrl = true)
+        val armed = Modifiers(ctrl = true)
         val (outcome, after) = press("ctl.save", armed)
         assertEquals(EditorCommand.SAVE, (outcome as KeyOutcome.Command).command)
         assertFalse(after.ctrl)
     }
 
     @Test
-    fun `tab indents, and shift-tab outdents`() {
+    fun `every ctrl key resolves to a command or an edit, and clears the latch`() {
+        val armed = Modifiers(ctrl = true)
+        KeyBarModel.ctrlKeys.forEach { k ->
+            val (outcome, after) = KeyBarModel.press(k, armed, Language.PYTHON)
+            assertTrue("No outcome for ${k.id}", outcome !is KeyOutcome.None)
+            assertFalse("Ctrl still armed after ${k.id}", after.ctrl)
+        }
+    }
+
+    @Test
+    fun `ctrl and tab are ordinary reorderable keys, not a pinned group`() {
+        val ids = KeyBarModel.defaultKeys(Language.PYTHON).map { it.id }
+        assertTrue("ctrl must live in the reorderable set", ids.contains(KeyBarModel.CTRL))
+        assertTrue("tab must live in the reorderable set", ids.contains(KeyBarModel.TAB))
+    }
+
+    @Test
+    fun `tab indents`() {
         val block = TextFieldValue("a\nb", TextRange(0, 3))
         assertEquals("    a\n    b", applied(KeyBarModel.TAB, block).text)
-        val indented = TextFieldValue("    a\n    b", TextRange(0, 11))
-        assertEquals("a\nb", applied(KeyBarModel.TAB, indented, none.copy(shift = true)).text)
     }
 
     @Test
-    fun `caps uppercases inserted text`() {
+    fun `dedent has its own key now that shift-tab is gone`() {
+        val indented = TextFieldValue("    a\n    b", TextRange(0, 11))
+        assertEquals("a\nb", applied("act.dedent", indented).text)
+    }
+
+    @Test
+    fun `insert keys insert their text verbatim`() {
         val v = TextFieldValue("", TextRange(0))
         assertEquals("self.", applied("lang.self", v).text)
-        assertEquals("SELF.", applied("lang.self", v, none.copy(caps = true)).text)
+        assertEquals("()", applied("sym.paren", v).text)
+        assertEquals(TextRange(1), applied("sym.paren", v).selection)
     }
 
     @Test
-    fun `arrows move the caret and shift-arrows extend the selection`() {
+    fun `arrows move the caret`() {
         val v = TextFieldValue("abcdef", TextRange(3))
         assertEquals(TextRange(4), applied("act.right", v).selection)
         assertEquals(TextRange(2), applied("act.left", v).selection)
-        assertEquals(TextRange(3, 4), applied("act.right", v, none.copy(shift = true)).selection)
     }
 
     @Test
@@ -145,6 +151,14 @@ class KeyBarModelTest {
     }
 
     @Test
+    fun `ctrl can be dragged anywhere, including last`() {
+        val keys = KeyBarModel.defaultKeys(Language.PYTHON)
+        val moved = KeyBarModel.reorder(keys, keys.indexOfFirst { it.id == KeyBarModel.CTRL }, keys.lastIndex)
+        assertEquals(KeyBarModel.CTRL, moved.last().id)
+        assertEquals(keys.size, moved.size)
+    }
+
+    @Test
     fun `a saved order is applied`() {
         val keys = KeyBarModel.defaultKeys(Language.PYTHON)
         val reversed = keys.map { it.id }.reversed()
@@ -154,14 +168,14 @@ class KeyBarModelTest {
     @Test
     fun `a saved order survives the key set changing`() {
         val keys = KeyBarModel.defaultKeys(Language.PYTHON)
-        // An order saved by an older version: two ids that no longer exist, and missing
-        // every key added since.
-        val stale = listOf("sym.eq", "gone.forever", "sym.dot")
+        // An order saved by an older version: ids that no longer exist (Shift and Caps
+        // were removed), and missing every key added since.
+        val stale = listOf("sym.eq", "mod.shift", "mod.caps", "sym.dot")
         val result = KeyBarModel.applyOrder(keys, stale)
 
         assertEquals("sym.eq", result[0].id)
         assertEquals("sym.dot", result[1].id)
-        assertEquals("Dropped keys must not survive", 0, result.count { it.id == "gone.forever" })
+        assertEquals("Removed keys must not come back", 0, result.count { it.id.startsWith("mod.shift") })
         assertEquals("Every current key must still be present", keys.size, result.size)
         assertEquals(keys.map { it.id }.toSet(), result.map { it.id }.toSet())
     }
@@ -173,18 +187,9 @@ class KeyBarModelTest {
     }
 
     @Test
-    fun `labels follow the modifiers`() {
-        val tab = key(KeyBarModel.TAB)
-        assertEquals("tab", KeyBarModel.labelFor(tab, none))
-        assertEquals("untab", KeyBarModel.labelFor(tab, none.copy(shift = true)))
-        val self = key("lang.self")
-        assertEquals("SELF.", KeyBarModel.labelFor(self, none.copy(caps = true)))
-    }
-
-    @Test
     fun `key ids are unique within a language`() {
         Language.entries.forEach { lang ->
-            val ids = (KeyBarModel.defaultKeys(lang) + KeyBarModel.modifierKeys).map { it.id }
+            val ids = KeyBarModel.defaultKeys(lang).map { it.id }
             assertEquals("Duplicate key id in $lang", ids.size, ids.toSet().size)
         }
     }

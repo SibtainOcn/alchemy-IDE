@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -83,7 +84,10 @@ fun CodeField(
     }
 
     val highlighted = remember(value.text, language, accents) {
-        Highlighter.highlight(value.text, language, accents)
+        // Highlighting is a nice-to-have; the text is not. A scanner bug on some
+        // pathological input shows plain text rather than crashing the screen.
+        runCatching { Highlighter.highlight(value.text, language, accents) }
+            .getOrElse { AnnotatedString(value.text) }
     }
     val transformation = remember(highlighted) {
         VisualTransformation { TransformedText(highlighted, OffsetMapping.Identity) }
@@ -91,10 +95,16 @@ fun CodeField(
 
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
 
-    // Gutter numbers repeat constantly and are re-measured on every frame otherwise;
-    // caching them per (label, active) keeps scrolling free of layout work.
+    // Gutter numbers repeat constantly and would be re-measured every frame otherwise.
+    // Bounded, because one entry per line number is a slow leak in a very long file; the
+    // cap is far above the number of rows that fit on any screen, so scrolling still
+    // never measures.
     val numberCache = remember(gutterStyle, accents) {
-        mutableMapOf<Pair<String, Boolean>, androidx.compose.ui.text.TextLayoutResult>()
+        object : LinkedHashMap<Pair<String, Boolean>, TextLayoutResult>(256, 0.75f, true) {
+            override fun removeEldestEntry(
+                eldest: MutableMap.MutableEntry<Pair<String, Boolean>, TextLayoutResult>,
+            ): Boolean = size > 512
+        }
     }
 
     // Line count drives the gutter width so a 4-digit file does not clip.
@@ -104,11 +114,17 @@ fun CodeField(
         ((digits * (fontSizeSp - 2) * 0.62f) + 20f).dp
     }
 
-    // Only measured when wrapping is off; the longest line sets the scrollable width.
-    val contentWidth = remember(value.text, fontSizeSp, wordWrap) {
+    // Only relevant when wrapping is off, where the longest line sets the scrollable
+    // width. Keyed on the longest line's *length* rather than the text: the editor font
+    // is monospace, so width is a function of character count, and typing inside a line
+    // that is not the longest re-measures nothing at all.
+    val longestLineLength = remember(value.text, wordWrap) {
+        if (wordWrap) 0 else value.text.lineSequence().maxOfOrNull { it.length } ?: 0
+    }
+    val contentWidth = remember(longestLineLength, fontSizeSp, wordWrap) {
         if (wordWrap) 0.dp else {
-            val longest = value.text.lineSequence().maxByOrNull { it.length }.orEmpty()
-            val px = measurer.measure(AnnotatedString(longest.take(4000)), style).size.width
+            val sample = "0".repeat(longestLineLength.coerceAtMost(4000))
+            val px = measurer.measure(AnnotatedString(sample), style).size.width
             with(density) { (px + 48).toDp() }
         }
     }
@@ -134,11 +150,30 @@ fun CodeField(
                     .height(heightDp)
                     .drawBehind {
                         val l = layout ?: return@drawBehind
-                        val text = value.text
+                        // The layout's own text, not the field's current text. Those two
+                        // disagree for a frame after every keystroke, and reading the
+                        // newer one against the older layout is what made the numbers
+                        // flicker between N and N+1 while typing.
+                        val text = l.layoutInput.text.text
+
+                        // The active row's band continues across the gutter, so the
+                        // highlight reads as one line rather than two halves.
+                        cursorLine?.takeIf { it < l.lineCount }?.let { line ->
+                            drawRect(
+                                color = accents.caretLine,
+                                topLeft = androidx.compose.ui.geometry.Offset(0f, l.getLineTop(line)),
+                                size = androidx.compose.ui.geometry.Size(
+                                    width = size.width,
+                                    height = l.getLineBottom(line) - l.getLineTop(line),
+                                ),
+                            )
+                        }
+
                         var lineNo = 1
                         for (i in 0 until l.lineCount) {
                             val start = l.getLineStart(i)
-                            // A wrapped continuation carries no number of its own.
+                            // A wrapped continuation carries no number of its own, which
+                            // is what makes the gutter count real lines rather than rows.
                             val isParagraphStart = start == 0 || text.getOrNull(start - 1) == '\n'
                             if (isParagraphStart) {
                                 val active = cursorLine == i
@@ -148,6 +183,7 @@ fun CodeField(
                                         AnnotatedString(label),
                                         gutterStyle.copy(
                                             color = if (active) accents.gutterActive else accents.gutter,
+                                            fontWeight = if (active) FontWeight.Medium else null,
                                         ),
                                     )
                                 }

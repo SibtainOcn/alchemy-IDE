@@ -131,11 +131,20 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         dirty = edited.text != savedText
     }
 
-    /** Applies a toolbar operation, always as its own undo step. */
+    /**
+     * Applies a toolbar operation, always as its own undo step.
+     *
+     * The operations do index arithmetic against the buffer, so a bad edge case would
+     * otherwise throw straight through composition and take the screen down. A failure
+     * here leaves the text exactly as it was.
+     */
     fun apply(op: (TextFieldValue) -> TextFieldValue) {
         if (readOnly) return
         val current = value
-        val next = op(current)
+        val next = runCatching { op(current) }.getOrElse {
+            message = "That did not work here"
+            return
+        }
         if (next.text != current.text) {
             undoStack.addLast(current)
             redoStack.clear()

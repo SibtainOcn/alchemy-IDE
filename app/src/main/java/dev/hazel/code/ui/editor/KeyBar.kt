@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -44,21 +43,18 @@ import androidx.compose.ui.zIndex
 import dev.hazel.code.data.Language
 import dev.hazel.code.ui.common.Motion
 import dev.hazel.code.ui.theme.CodeFont
-import dev.hazel.code.ui.theme.Hairline
 import dev.hazel.code.ui.theme.InkRaised
 import dev.hazel.code.ui.theme.TextHigh
-import dev.hazel.code.ui.theme.TextMid
 
 /**
  * The strip above the keyboard: the keys a phone IME does not have.
  *
- * Layout is two groups. Ctrl, Shift, Caps and Tab are pinned on the left and never scroll
- * away, because a modifier you have to go looking for is not a modifier. Everything else
- * scrolls, and can be long-pressed and dragged into whatever order suits the language you
- * actually write.
+ * One row, everything in it draggable. There is no pinned group any more - pinning Ctrl,
+ * Shift, Caps and Tab cost the width of four keys on every screen and stopped exactly the
+ * keys people most want to move from being moved.
  *
- * Arming Ctrl swaps the scrolling group for the shortcut set rather than overlaying
- * anything, so there is never a question about what a key will do when you tap it.
+ * Arming Ctrl swaps the row for the shortcut set rather than overlaying anything, so there
+ * is never a question about what a key will do when you tap it.
  */
 private const val KEY_GAP_DP = 6
 
@@ -72,63 +68,23 @@ fun KeyBar(
     onOutcome: (KeyOutcome) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier
+    AnimatedContent(
+        targetState = mods.ctrl,
+        transitionSpec = { fadeIn(Motion.snappy()) togetherWith fadeOut(Motion.snappy()) },
+        label = "keyset",
+        modifier = modifier
             .fillMaxWidth()
-            .background(InkRaised)
-            .padding(vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Pinned modifier group.
-        Row(
-            Modifier.padding(start = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(KEY_GAP_DP.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            KeyBarModel.modifierKeys.forEach { key ->
-                val active = when (key.id) {
-                    KeyBarModel.SHIFT -> mods.shift
-                    KeyBarModel.CTRL -> mods.ctrl
-                    KeyBarModel.CAPS -> mods.caps
-                    else -> false
-                }
-                KeyCap(
-                    label = KeyBarModel.labelFor(key, mods),
-                    active = active,
-                    dimmed = true,
-                    onClick = {
-                        val (outcome, next) = KeyBarModel.press(key, mods, language)
-                        onMods(next)
-                        if (outcome !is KeyOutcome.None) onOutcome(outcome)
-                    },
-                )
-            }
-        }
-
-        Box(
-            Modifier
-                .padding(horizontal = 7.dp)
-                .width(1.dp)
-                .height(24.dp)
-                .background(Hairline)
-        )
-
-        AnimatedContent(
-            targetState = mods.ctrl,
-            transitionSpec = { fadeIn(Motion.snappy()) togetherWith fadeOut(Motion.snappy()) },
-            label = "keyset",
-            modifier = Modifier.weight(1f),
-        ) { ctrlArmed ->
-            if (ctrlArmed) {
-                ShortcutRow(language, mods, onMods, onOutcome)
-            } else {
-                ReorderableRow(language, mods, order, onMods, onOrderChange, onOutcome)
-            }
+            .background(InkRaised),
+    ) { ctrlArmed ->
+        if (ctrlArmed) {
+            ShortcutRow(language, mods, onMods, onOutcome)
+        } else {
+            ReorderableRow(language, mods, order, onMods, onOrderChange, onOutcome)
         }
     }
 }
 
-/** The Ctrl set. Fixed order — these are commands, not characters you arrange to taste. */
+/** The Ctrl set. Fixed order - these are commands, not characters you arrange to taste. */
 @Composable
 private fun ShortcutRow(
     language: Language,
@@ -139,10 +95,13 @@ private fun ShortcutRow(
     Row(
         Modifier
             .horizontalScroll(rememberScrollState())
-            .padding(end = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 7.dp),
         horizontalArrangement = Arrangement.spacedBy(KEY_GAP_DP.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // A way back out without running anything.
+        KeyCap(label = "ctrl", active = true, onClick = { onMods(Modifiers(ctrl = false)) })
+
         KeyBarModel.ctrlKeys.forEach { key ->
             KeyCap(
                 label = key.label,
@@ -158,7 +117,7 @@ private fun ShortcutRow(
 }
 
 /**
- * The scrolling group, with long-press-and-drag reordering.
+ * The scrolling row, with long-press-and-drag reordering.
  *
  * Every key is composed rather than lazily windowed: there are a few dozen of them, and
  * having all their widths measured is what makes the swap threshold exact instead of
@@ -187,7 +146,7 @@ private fun ReorderableRow(
     Row(
         Modifier
             .horizontalScroll(rememberScrollState())
-            .padding(end = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 7.dp),
         horizontalArrangement = Arrangement.spacedBy(KEY_GAP_DP.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -195,7 +154,8 @@ private fun ReorderableRow(
             val dragging = draggingId == key.id
 
             KeyCap(
-                label = KeyBarModel.labelFor(key, mods),
+                label = key.label,
+                dimmed = key.kind != KeyKind.INSERT,
                 dragging = dragging,
                 modifier = Modifier
                     .zIndex(if (dragging) 1f else 0f)
@@ -281,7 +241,6 @@ private fun KeyCap(
         label = "key",
     )
 
-    val lit = active || pressed || dragging
     val background = when {
         active -> MaterialTheme.colorScheme.primary
         pressed || dragging -> MaterialTheme.colorScheme.primaryContainer
@@ -289,9 +248,8 @@ private fun KeyCap(
     }
     val content = when {
         active -> MaterialTheme.colorScheme.onPrimary
-        lit -> MaterialTheme.colorScheme.primary
-        accented -> MaterialTheme.colorScheme.primary
-        dimmed -> TextMid
+        pressed || dragging || accented -> MaterialTheme.colorScheme.primary
+        dimmed -> TextHigh.copy(alpha = 0.72f)
         else -> TextHigh
     }
 

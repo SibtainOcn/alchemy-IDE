@@ -29,7 +29,9 @@ fun rememberPasteFromClipboard(): ((String) -> Unit) -> Unit {
             scope.launch {
                 // Plain text only: coercing other item types needs a Context and would
                 // paste a URI string into source code, which is never what was meant.
-                val text = clipboard.getClipEntry()
+                // The read crosses a process boundary, so it can fail for reasons that
+                // have nothing to do with us.
+                val text = runCatching { clipboard.getClipEntry() }.getOrNull()
                     ?.clipData
                     ?.takeIf { it.itemCount > 0 }
                     ?.getItemAt(0)
@@ -48,7 +50,9 @@ fun rememberCopyToClipboard(): (String) -> Unit {
     return remember(clipboard, scope) {
         fun(text: String) {
             scope.launch {
-                clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Hazel", text)))
+                runCatching {
+                    clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Hazel", text)))
+                }
             }
         }
     }
