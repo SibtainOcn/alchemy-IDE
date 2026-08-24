@@ -20,15 +20,19 @@ val appVersionName: String = (findProperty("versionName") as String?) ?: "1.0.0"
 val appVersionCode: Int = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
 
 /**
- * RELEASE, BETA or DEBUG — the middle word of every APK filename.
+ * STABLE, BETA or DEBUG - the middle word of every APK filename.
  *
- * Anything with a pre-release suffix (`-beta.1`, `-alpha.2`, `-rc.1`) is BETA, so a
- * pre-release build can never be mistaken for a final one sitting in the same folder.
+ * "Release" describes how a build was compiled, not how finished it is: a beta is a
+ * release build too. The channel answers the question a person downloading actually has,
+ * which is whether this one is safe to rely on.
+ *
+ * Anything carrying a pre-release suffix (`-beta.1`, `-alpha.2`, `-rc.1`) is BETA, so a
+ * pre-release can never be mistaken for a finished build sitting in the same folder.
  */
 fun channelFor(buildType: String, versionName: String): String = when {
     buildType == "debug" -> "DEBUG"
     versionName.contains(Regex("(?i)-(alpha|beta|rc)")) -> "BETA"
-    else -> "RELEASE"
+    else -> "STABLE"
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +151,7 @@ dependencies {
 // them, so the build's own files are left alone and the ones meant for people are copied
 // out under readable names:
 //
-//     HAZEL-IDE-RELEASE-v1.0.0-arm64-v8a.apk
+//     HAZEL-IDE-STABLE-v1.0.0-arm64-v8a.apk
 //     HAZEL-IDE-BETA-v2.0.0-beta.1-universal.apk
 //
 // The copy is what CI attaches to a GitHub release, alongside checksums.txt.
