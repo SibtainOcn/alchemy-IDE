@@ -298,6 +298,98 @@ object SmartEdit {
         )
     }
 
+    // ---- Caret movement, for the arrow keys on the key bar ----
+
+    /**
+     * Moves the caret [delta] characters. With [extend] the anchor stays put and the
+     * selection grows, which is how a keyboard's Shift+arrow behaves.
+     */
+    fun moveCaret(v: TextFieldValue, delta: Int, extend: Boolean): TextFieldValue {
+        val from = if (extend) v.selection.end else {
+            // Collapsing a selection with a plain arrow lands on the near edge, not on
+            // wherever the moving end happened to be.
+            if (!v.selection.collapsed) {
+                return TextFieldValue(
+                    v.text,
+                    TextRange(if (delta < 0) v.selection.min else v.selection.max),
+                )
+            }
+            v.selection.start
+        }
+        val target = (from + delta).coerceIn(0, v.text.length)
+        return TextFieldValue(
+            v.text,
+            if (extend) TextRange(v.selection.start, target) else TextRange(target),
+        )
+    }
+
+    /**
+     * Moves the caret a whole line, keeping the column where possible.
+     *
+     * This walks logical lines rather than visual ones: without the text layout there is
+     * no way to know where a wrapped row breaks, and stepping by paragraph is the
+     * predictable choice when they differ.
+     */
+    fun moveCaretLine(v: TextFieldValue, deltaLines: Int, extend: Boolean): TextFieldValue {
+        val text = v.text
+        val head = if (extend) v.selection.end else v.selection.start
+        val start = lineStart(text, head)
+        val column = head - start
+
+        val target = if (deltaLines < 0) {
+            if (start == 0) return moveCaret(v, -head, extend)
+            val prevStart = lineStart(text, start - 1)
+            (prevStart + column).coerceAtMost(start - 1)
+        } else {
+            val end = lineEnd(text, head)
+            if (end >= text.length) return moveCaret(v, text.length - head, extend)
+            val nextStart = end + 1
+            (nextStart + column).coerceAtMost(lineEnd(text, nextStart))
+        }
+        return TextFieldValue(
+            text,
+            if (extend) TextRange(v.selection.start, target) else TextRange(target),
+        )
+    }
+
+    fun selectAll(v: TextFieldValue): TextFieldValue =
+        TextFieldValue(v.text, TextRange(0, v.text.length))
+
+    /** Removes the selection, if there is one. Backs Cut. */
+    fun deleteSelection(v: TextFieldValue): TextFieldValue {
+        if (v.selection.collapsed) return v
+        return TextFieldValue(
+            v.text.removeRange(v.selection.min, v.selection.max),
+            TextRange(v.selection.min),
+        )
+    }
+
+    /** The selected text, or the whole line when nothing is selected. */
+    fun selectedTextOrLine(v: TextFieldValue): String {
+        if (!v.selection.collapsed) return v.text.substring(v.selection.min, v.selection.max)
+        return v.text.substring(lineStart(v.text, v.selection.start), lineEnd(v.text, v.selection.start))
+    }
+
+    /** Jumps to the first non-blank character of the line, then to column 0. */
+    fun toLineStart(v: TextFieldValue, extend: Boolean): TextFieldValue {
+        val start = lineStart(v.text, v.selection.start)
+        val firstWord = start + v.text.substring(start, lineEnd(v.text, start))
+            .takeWhile { it == ' ' || it == '\t' }.length
+        val target = if (v.selection.start == firstWord) start else firstWord
+        return TextFieldValue(
+            v.text,
+            if (extend) TextRange(v.selection.start, target) else TextRange(target),
+        )
+    }
+
+    fun toLineEnd(v: TextFieldValue, extend: Boolean): TextFieldValue {
+        val target = lineEnd(v.text, v.selection.start)
+        return TextFieldValue(
+            v.text,
+            if (extend) TextRange(v.selection.start, target) else TextRange(target),
+        )
+    }
+
     /** Inserts a literal snippet at the caret, replacing any selection. */
     fun insert(v: TextFieldValue, snippet: String, caretOffset: Int = snippet.length): TextFieldValue {
         val start = v.selection.min

@@ -48,6 +48,25 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     val language: Language get() = file?.let { Language.of(it.name) } ?: Language.PLAIN
 
+    /** Live key-bar modifier latches. Reset whenever a different file is opened. */
+    var modifiers by mutableStateOf(Modifiers())
+        private set
+
+    /** The user's dragged key order for the current language. */
+    var keyOrder by mutableStateOf(emptyList<String>())
+        private set
+
+    fun updateModifiers(next: Modifiers) { modifiers = next }
+
+    fun updateKeyOrder(order: List<String>) {
+        keyOrder = order
+        prefs.setKeyOrder(language.name, order)
+    }
+
+    private fun loadKeyOrder() {
+        keyOrder = prefs.keyOrder(language.name)
+    }
+
     /**
      * Undo history. Snapshots are coalesced: a run of ordinary typing collapses into one
      * step, but a newline, a deletion or a pause starts a fresh one, which is what makes
@@ -68,6 +87,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         file = target
         loading = true
         mode = if (Language.of(target.name) == Language.MARKDOWN) ViewMode.PREVIEW else ViewMode.EDIT
+        modifiers = Modifiers()
+        loadKeyOrder()
         viewModelScope.launch {
             val binary = FileStore.looksBinary(target)
             if (binary) {
