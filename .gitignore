@@ -20,11 +20,18 @@ gradle/gradle-daemon-jvm.properties
 # Reference material copied in from other projects while working; not part of the app.
 temp/
 
+# Local release notes for the maintainer; kept out of the repo deliberately.
+RELEASING.md
+
 # Signing material. Never commit these.
+# keystore.properties.template is the checked-in example; the real file is not.
 *.jks
 *.keystore
 keystore.properties
 signing.properties
+*.base64
+*.base64.txt
+keystore.base64*
 
 # Android Studio / IntelliJ
 .idea/
