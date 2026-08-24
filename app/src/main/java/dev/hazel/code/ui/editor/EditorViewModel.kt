@@ -67,14 +67,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         keyOrder = prefs.keyOrder(language.name)
     }
 
-    /**
-     * Undo history. Snapshots are coalesced: a run of ordinary typing collapses into one
-     * step, but a newline, a deletion or a pause starts a fresh one, which is what makes
-     * undo feel like it steps through edits rather than characters.
-     */
-    private val undoStack = ArrayDeque<TextFieldValue>()
-    private val redoStack = ArrayDeque<TextFieldValue>()
-    private var lastSnapshotAt = 0L
+    /** Undo history, with its own memory budget. See [UndoHistory]. */
+    private val history = UndoHistory()
     private var savedText = ""
 
     var canUndo by mutableStateOf(false)
@@ -111,7 +105,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                     readOnly = true
                     message = it.message ?: "Could not read this file"
                 }
-            undoStack.clear(); redoStack.clear(); syncHistoryFlags()
+            history.clear(); syncHistoryFlags()
             dirty = false
             // Same reasoning as the explorer: let the loader own at least a frame or two
             // instead of blinking.
@@ -123,9 +117,11 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun onValueChange(next: TextFieldValue) {
         if (readOnly) return
         val current = value
-        val edited = SmartEdit.onValueChange(current, next, language, autoPair)
+        val edited = runCatching { SmartEdit.onValueChange(current, next, language, autoPair) }
+            .getOrDefault(next)
         if (edited.text != current.text) {
-            pushUndo(current, edited)
+            history.record(current, edited)
+            syncHistoryFlags()
         }
         value = edited
         dirty = edited.text != savedText
@@ -146,57 +142,30 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         if (next.text != current.text) {
-            undoStack.addLast(current)
-            redoStack.clear()
-            trim()
-            lastSnapshotAt = 0L
+            history.recordDiscrete(current)
             syncHistoryFlags()
         }
         value = next
         dirty = next.text != savedText
     }
 
-    private fun pushUndo(previous: TextFieldValue, next: TextFieldValue) {
-        val now = System.currentTimeMillis()
-        val bigChange = kotlin.math.abs(next.text.length - previous.text.length) > 1
-        val newLine = next.text.length > previous.text.length &&
-            next.text.getOrNull(next.selection.start - 1) == '\n'
-        val stale = now - lastSnapshotAt > 700
-
-        if (undoStack.isEmpty() || stale || bigChange || newLine) {
-            undoStack.addLast(previous)
-            trim()
-        }
-        lastSnapshotAt = now
-        redoStack.clear()
-        syncHistoryFlags()
-    }
-
-    private fun trim() {
-        while (undoStack.size > 120) undoStack.removeFirst()
-    }
-
     fun undo() {
-        val prev = undoStack.removeLastOrNull() ?: return
-        redoStack.addLast(value)
-        value = prev
-        dirty = prev.text != savedText
-        lastSnapshotAt = 0L
+        val previous = history.undo(value) ?: return
+        value = previous
+        dirty = previous.text != savedText
         syncHistoryFlags()
     }
 
     fun redo() {
-        val next = redoStack.removeLastOrNull() ?: return
-        undoStack.addLast(value)
+        val next = history.redo(value) ?: return
         value = next
         dirty = next.text != savedText
-        lastSnapshotAt = 0L
         syncHistoryFlags()
     }
 
     private fun syncHistoryFlags() {
-        canUndo = undoStack.isNotEmpty()
-        canRedo = redoStack.isNotEmpty()
+        canUndo = history.canUndo
+        canRedo = history.canRedo
     }
 
     fun save(onDone: (Boolean) -> Unit = {}) {
