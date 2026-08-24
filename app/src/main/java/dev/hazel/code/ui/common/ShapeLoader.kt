@@ -21,15 +21,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposePath
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.CornerRounding
 import androidx.graphics.shapes.Morph
 import androidx.graphics.shapes.RoundedPolygon
-import androidx.graphics.shapes.circle
-import androidx.graphics.shapes.pill
 import androidx.graphics.shapes.star
 import androidx.graphics.shapes.toPath
 import dev.hazel.code.ui.theme.TextMid
@@ -43,33 +44,20 @@ import dev.hazel.code.ui.theme.TextMid
  * covers every size without extra assets.
  */
 private const val MORPH_STEP_MS = 650
-private const val SPIN_MS = 4200
+private const val SPIN_MS = 2600
 
+/**
+ * Four shapes, not two and not six.
+ *
+ * A two-shape morph reverses back through the in-between states it just came from, which
+ * reads as a wobble rather than progress. A loop of four never retraces, so the motion has
+ * a direction. More than four and each hop gets too short to register at this size.
+ */
 private fun loaderShapes(): List<RoundedPolygon> = listOf(
-    RoundedPolygon.star(
-        numVerticesPerRadius = 9,
-        innerRadius = 0.82f,
-        rounding = CornerRounding(0.45f),
-        innerRounding = CornerRounding(0.45f),
-    ),
-    RoundedPolygon(
-        numVertices = 4,
-        rounding = CornerRounding(0.32f),
-    ),
-    RoundedPolygon.star(
-        numVerticesPerRadius = 4,
-        innerRadius = 0.5f,
-        rounding = CornerRounding(0.4f),
-        innerRounding = CornerRounding(0.32f),
-    ),
-    RoundedPolygon.pill(width = 1f, height = 0.62f),
-    RoundedPolygon.star(
-        numVerticesPerRadius = 6,
-        innerRadius = 0.75f,
-        rounding = CornerRounding(0.5f),
-        innerRounding = CornerRounding(0.5f),
-    ),
-    RoundedPolygon.circle(numVertices = 12),
+    RoundedPolygon(numVertices = 4, rounding = CornerRounding(0.35f)),
+    RoundedPolygon.star(numVerticesPerRadius = 6, innerRadius = 0.7f, rounding = CornerRounding(0.28f)),
+    RoundedPolygon(numVertices = 7, rounding = CornerRounding(0.4f)),
+    RoundedPolygon.star(numVerticesPerRadius = 5, innerRadius = 0.62f, rounding = CornerRounding(0.3f)),
 )
 
 @Composable
@@ -78,16 +66,17 @@ fun ShapeLoader(
     size: Dp = 26.dp,
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
+    // Built once. Allocating a Morph inside the draw would churn on every frame of an
+    // animation that never stops.
     val morphs = remember {
-        val shapes = loaderShapes().map { it.normalized() }
+        val shapes = loaderShapes()
         shapes.indices.map { i -> Morph(shapes[i], shapes[(i + 1) % shapes.size]) }
     }
 
     val transition = rememberInfiniteTransition(label = "shape-loader")
 
-    // One continuous ramp across the whole shape loop; the integer part selects the
-    // morph, the fraction drives it. Keeping it as a single animation means the
-    // hand-off between shapes never stutters.
+    // One continuous ramp across the whole loop: the integer part selects the morph, the
+    // fraction drives it. A single animation means the hand-off never stutters.
     val cursor by transition.animateFloat(
         initialValue = 0f,
         targetValue = morphs.size.toFloat(),
@@ -109,21 +98,21 @@ fun ShapeLoader(
 
     Canvas(modifier = modifier.size(size)) {
         val index = cursor.toInt().coerceIn(0, morphs.lastIndex)
-        val raw = cursor - index
-        // Ease each hop so the shape settles before the next one starts.
-        val progress = raw * raw * (3f - 2f * raw)
+        drawMorph(morphs[index], cursor - index, spin, color)
+    }
+}
 
-        val side = kotlin.math.min(this.size.width, this.size.height)
-        val path = morphs[index].toPath(progress).apply {
-            val m = android.graphics.Matrix()
-            m.setScale(side, side)
-            transform(m)
-        }.asComposePath()
+/**
+ * The polygons are described in a space centred on the origin with radius 1, so placing
+ * one is just: move to the middle, turn, scale to fit.
+ */
+private fun DrawScope.drawMorph(morph: Morph, fraction: Float, degrees: Float, color: Color) {
+    val path = morph.toPath(fraction).asComposePath()
+    val radius = minOf(size.width, size.height) / 2f
 
-        val dx = (this.size.width - side) / 2f
-        val dy = (this.size.height - side) / 2f
-        rotate(spin) {
-            translate(dx, dy) {
+    translate(size.width / 2f, size.height / 2f) {
+        rotate(degrees, pivot = Offset.Zero) {
+            scale(radius, radius, pivot = Offset.Zero) {
                 drawPath(path, color)
             }
         }

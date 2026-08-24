@@ -107,12 +107,15 @@ fun EditorScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        // The editor bar carries the status-bar inset; Scaffold adding it as well left a
+        // dead strip at the top of the screen.
+        contentWindowInsets = WindowInsets(0),
         snackbarHost = { SnackbarHost(snackbar) },
     ) { pad ->
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(top = pad.calculateTopPadding())
+                .padding(pad)
                 .imePadding()
         ) {
             EditorBar(

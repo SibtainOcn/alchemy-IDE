@@ -50,6 +50,30 @@ class FormatTest {
     }
 
     @Test
+    fun `folder header pairs total size with item count`() {
+        val listing = listOf(
+            entry("src", isDir = true, children = 3),
+            entry("a.py", size = 1024),
+            entry("b.py", size = 512),
+        )
+        assertEquals("1.5 KB  ·  3 items", Fmt.folderMeta(listing))
+    }
+
+    @Test
+    fun `a folder of only folders reports the count alone`() {
+        val listing = listOf(
+            entry("one", isDir = true, children = 2),
+            entry("two", isDir = true, children = 0),
+        )
+        assertEquals("2 items", Fmt.folderMeta(listing))
+    }
+
+    @Test
+    fun `an empty folder header does not say zero bytes`() {
+        assertEquals("0 items", Fmt.folderMeta(emptyList()))
+    }
+
+    @Test
     fun `a missing timestamp does not render as 1970`() {
         assertEquals("--", Fmt.date(0L))
     }

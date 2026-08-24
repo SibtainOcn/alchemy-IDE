@@ -96,7 +96,9 @@ data class HazelAccents(
     val brace: Color = Color(0xFFF8F8F2),
     val folder: Color = Color(0xFFFFB300),
     val folderShade: Color = Color(0xFFE08A00),
-    val gutter: Color = Color(0xFF3A3A3F),
+    // Inactive line numbers still have to be readable on #000000; the previous value
+    // was dark enough that only the current line showed.
+    val gutter: Color = Color(0xFF6B6B78),
     val gutterActive: Color = Color(0xFF0FCBE8),
     val caretLine: Color = Color(0xFF0D0D0D),
 )
