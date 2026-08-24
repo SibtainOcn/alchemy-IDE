@@ -17,11 +17,18 @@ concurrency:
 env:
   GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
 
+# One job, not two.
+#
+# Verification and packaging were split so a failing test would not wait on a release
+# build — but packaging needed verification to pass first, so the two never ran in
+# parallel and the split bought nothing while paying twice for checkout, JDK, Gradle and
+# the Android SDK. The steps below still run cheapest-first, so a syntax error or a broken
+# test still fails in a couple of minutes; it just does so without a second machine.
 jobs:
-  verify:
-    name: Verify
+  ci:
+    name: Verify and build
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +50,7 @@ jobs:
 
       # Compiles settings.gradle.kts and every build.gradle.kts without building anything.
       # A syntax error or a bad plugin coordinate fails here, in seconds, with a clear
-      # message — before twenty minutes of Android tooling has run.
+      # message — before the Android tooling has run at all.
       - name: Gradle script syntax
         run: ./gradlew help --quiet
 
@@ -56,16 +63,39 @@ jobs:
       - name: Unit tests
         run: ./gradlew :app:testSummary :app:verifyTestFloor --stacktrace
 
-      # The count is read from the JUnit XML, so the number on the PR is always the number
-      # that actually ran.
-      - name: Publish test totals
+      # Release as well as debug: R8 shrinking is where a missing keep rule or a
+      # reflective call shows up, and that must not be discovered at tag time.
+      - name: Assemble debug and release
+        run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
+
+      # The test count is read from the JUnit XML, so the number on the PR is always the
+      # number that actually ran.
+      - name: Publish summary
         if: always()
         run: |
           if [ -f app/build/test-summary.md ]; then
             cat app/build/test-summary.md >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "No test summary was produced." >> "$GITHUB_STEP_SUMMARY"
           fi
+          if compgen -G "app/build/outputs/apk/*/*.apk" > /dev/null; then
+            {
+              echo
+              echo "### APK size"
+              echo
+              echo "| Variant | Size |"
+              echo "|---------|-----:|"
+              for apk in app/build/outputs/apk/*/*.apk; do
+                echo "| $(basename "$apk") | $(du -h "$apk" | cut -f1) |"
+              done
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hazel-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
 
       - name: Upload reports on failure
         if: failure()
@@ -76,50 +106,3 @@ jobs:
             app/build/reports/
             app/build/test-results/
           retention-days: 7
-
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: verify
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      # Release is built as well as debug: R8 shrinking is where a missing keep rule or a
-      # reflective call shows up, and that must not be discovered at tag time.
-      - name: Assemble debug and release
-        run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
-
-      - name: Report APK sizes
-        run: |
-          {
-            echo "### APK size"
-            echo
-            echo "| Variant | Size |"
-            echo "|---------|-----:|"
-            for apk in app/build/outputs/apk/*/*.apk; do
-              [ -f "$apk" ] || continue
-              size=$(du -h "$apk" | cut -f1)
-              echo "| $(basename "$apk") | $size |"
-            done
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: hazel-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 14
