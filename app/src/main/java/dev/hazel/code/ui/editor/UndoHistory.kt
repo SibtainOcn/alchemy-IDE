@@ -19,12 +19,38 @@ import androidx.compose.ui.text.input.TextFieldValue
  */
 class UndoHistory(
     private val maxEntries: Int = 120,
-    /** Roughly 8 MB of UTF-16, shared across both stacks. */
-    private val maxChars: Int = 4_000_000,
+    /** Characters held across both stacks. Defaults to a share of this device's heap. */
+    private val maxChars: Int = budgetCharsFor(Runtime.getRuntime().maxMemory()),
     private val minEntries: Int = 3,
     private val coalesceWindowMs: Long = 700,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
+    companion object {
+        /** Never squander a big heap, and never assume one. */
+        private const val FLOOR_CHARS = 4_000_000      // 8 MB of UTF-16
+        private const val CEILING_CHARS = 32_000_000   // 64 MB of UTF-16
+
+        /** The share of the app heap undo history is allowed to occupy. */
+        private const val HEAP_SHARE = 0.15
+
+        /**
+         * How much history this device can afford.
+         *
+         * The limit that matters is not the phone's RAM but the per-app heap Android
+         * grants, which the manufacturer sets and which is commonly 128-256 MB even on a
+         * 6 GB device. Allocating past it throws OutOfMemoryError while gigabytes sit
+         * free, so the budget is taken from the heap actually granted rather than from a
+         * number guessed at build time: a generous device gets a deep history, a
+         * constrained one still gets a usable one.
+         *
+         * Divided by two because a Kotlin String is UTF-16 - two bytes per character.
+         */
+        fun budgetCharsFor(maxHeapBytes: Long): Int {
+            val chars = (maxHeapBytes * HEAP_SHARE / 2).toLong()
+            return chars.coerceIn(FLOOR_CHARS.toLong(), CEILING_CHARS.toLong()).toInt()
+        }
+    }
+
     private val undo = ArrayDeque<TextFieldValue>()
     private val redo = ArrayDeque<TextFieldValue>()
     private var lastPushAt = 0L
