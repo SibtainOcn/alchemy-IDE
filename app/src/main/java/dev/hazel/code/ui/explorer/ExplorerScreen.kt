@@ -115,8 +115,16 @@ fun ExplorerScreen(
     var sortSheet by remember { mutableStateOf(false) }
 
     // One scroll position per folder, so backing out of a directory lands you where you
-    // left rather than at the top - the thing every file manager gets judged on.
-    val scrollStates = remember { mutableMapOf<String, androidx.compose.foundation.lazy.LazyListState>() }
+    // left rather than at the top - the thing every file manager gets judged on. Bounded
+    // and least-recently-used, since a long browsing session would otherwise keep a state
+    // object for every folder ever opened.
+    val scrollStates = remember {
+        object : LinkedHashMap<String, androidx.compose.foundation.lazy.LazyListState>(32, 0.75f, true) {
+            override fun removeEldestEntry(
+                eldest: MutableMap.MutableEntry<String, androidx.compose.foundation.lazy.LazyListState>,
+            ): Boolean = size > 64
+        }
+    }
 
     // Swallowing back at the root would trap the user in the app.
     BackHandler(enabled = !state.atRoot || state.searching) { vm.up() }

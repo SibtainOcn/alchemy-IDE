@@ -70,13 +70,14 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Undo history. Snapshots are coalesced: a run of ordinary typing collapses into one
-     * step, but a newline, a deletion or a pause starts a fresh one, which is what makes
-     * undo feel like it steps through edits rather than characters.
+     * Undo history for every file opened this session, and the current file's within it.
+     *
+     * The store lives on the view model, which the activity owns, so switching files
+     * keeps each file's history and leaving the app discards all of them. See [UndoStore]
+     * for why that lifetime is the one worth having.
      */
-    private val undoStack = ArrayDeque<TextFieldValue>()
-    private val redoStack = ArrayDeque<TextFieldValue>()
-    private var lastSnapshotAt = 0L
+    private val histories = UndoStore()
+    private var history = UndoHistory()
     private var savedText = ""
 
     var canUndo by mutableStateOf(false)
@@ -91,6 +92,10 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         mode = if (Language.of(target.name) == Language.MARKDOWN) ViewMode.PREVIEW else ViewMode.EDIT
         modifiers = Modifiers()
         loadKeyOrder()
+        // Until the read lands there is no buffer to undo into, and the outgoing file's
+        // history must not answer for the incoming one.
+        history = UndoHistory()
+        syncHistoryFlags()
         viewModelScope.launch {
             val binary = FileStore.looksBinary(target)
             if (binary) {
@@ -104,6 +109,9 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                 .onSuccess { text ->
                     savedText = text
                     value = TextFieldValue(text)
+                    // Reopening a file this session picks its history back up, unless the
+                    // file has changed since, in which case the store hands back a new one.
+                    history = histories.of(target.absolutePath, text)
                     readOnly = target.length() > FileStore.EDIT_LIMIT_BYTES || !target.canWrite()
                     if (readOnly && target.length() > FileStore.EDIT_LIMIT_BYTES) {
                         message = "Large file - opened read-only"
@@ -113,7 +121,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                     readOnly = true
                     message = it.message ?: "Could not read this file"
                 }
-            undoStack.clear(); redoStack.clear(); syncHistoryFlags()
+            syncHistoryFlags()
             dirty = false
             // Same reasoning as the explorer: let the loader own at least a frame or two
             // instead of blinking.
@@ -125,12 +133,13 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun onValueChange(next: TextFieldValue) {
         if (readOnly) return
         val current = value
-        val edited = SmartEdit.onValueChange(current, next, language, autoPair)
+        val edited = runCatching { SmartEdit.onValueChange(current, next, language, autoPair) }
+            .getOrDefault(next)
         if (edited.text != current.text) {
-            pushUndo(current, edited)
+            history.record(current, edited)
+            syncHistoryFlags()
         }
-        value = edited
-        dirty = edited.text != savedText
+        commit(edited)
     }
 
     /**
@@ -148,57 +157,37 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         if (next.text != current.text) {
-            undoStack.addLast(current)
-            redoStack.clear()
-            trim()
-            lastSnapshotAt = 0L
+            history.recordDiscrete(current)
             syncHistoryFlags()
         }
-        value = next
-        dirty = next.text != savedText
-    }
-
-    private fun pushUndo(previous: TextFieldValue, next: TextFieldValue) {
-        val now = System.currentTimeMillis()
-        val bigChange = kotlin.math.abs(next.text.length - previous.text.length) > 1
-        val newLine = next.text.length > previous.text.length &&
-            next.text.getOrNull(next.selection.start - 1) == '\n'
-        val stale = now - lastSnapshotAt > 700
-
-        if (undoStack.isEmpty() || stale || bigChange || newLine) {
-            undoStack.addLast(previous)
-            trim()
-        }
-        lastSnapshotAt = now
-        redoStack.clear()
-        syncHistoryFlags()
-    }
-
-    private fun trim() {
-        while (undoStack.size > 120) undoStack.removeFirst()
+        commit(next)
     }
 
     fun undo() {
-        val prev = undoStack.removeLastOrNull() ?: return
-        redoStack.addLast(value)
-        value = prev
-        dirty = prev.text != savedText
-        lastSnapshotAt = 0L
+        val previous = history.undo(value) ?: return
+        commit(previous)
         syncHistoryFlags()
     }
 
     fun redo() {
-        val next = redoStack.removeLastOrNull() ?: return
-        undoStack.addLast(value)
-        value = next
-        dirty = next.text != savedText
-        lastSnapshotAt = 0L
+        val next = history.redo(value) ?: return
+        commit(next)
         syncHistoryFlags()
     }
 
+    /**
+     * Puts [next] in the buffer and tells the store what this file now holds, which is
+     * what a later reopen compares against to decide whether its history still applies.
+     */
+    private fun commit(next: TextFieldValue) {
+        value = next
+        dirty = next.text != savedText
+        file?.let { histories.noteText(it.absolutePath, next.text) }
+    }
+
     private fun syncHistoryFlags() {
-        canUndo = undoStack.isNotEmpty()
-        canRedo = redoStack.isNotEmpty()
+        canUndo = history.canUndo
+        canRedo = history.canRedo
     }
 
     fun save(onDone: (Boolean) -> Unit = {}) {

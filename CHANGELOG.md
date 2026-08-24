@@ -27,6 +27,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   columns and the space between them together rather than only the body text.
 - **Markdown tables**, with alignment, horizontal scroll and fixed column widths. Also
   task lists, nested and ordered lists, setext headings and backslash escapes.
+- **Undo history per file, for as long as the app is running.** Leaving a file to look at
+  another one and coming back finds its history where you left it. Nothing is written to
+  disk, so closing the app clears every history - there is no saved undo file to go stale
+  against a file edited elsewhere between sessions. A history whose file has changed
+  underneath it is dropped rather than reused, and the memory budget is shared across
+  files rather than granted to each of them: past it, the least recently edited file loses
+  its history whole so the file in front of you keeps all of its own.
 - **Test tooling.** `:app:testSummary` reports real counts from the JUnit XML;
   `:app:verifyTestFloor` fails if the suite shrinks below the recorded floor.
 - **CI** on every pull request: Gradle script syntax, Kotlin compile, Android Lint and
@@ -39,6 +46,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   a local order and is saved on release, so a key goes wherever it is dropped; holding it
   against either edge scrolls the row underneath it, which is what makes the far end of
   the bar reachable in one gesture.
+- **Undo could run the app out of memory.** Each snapshot is a whole copy of the buffer,
+  and the limit was a count: 120 snapshots of a 900 KB file is 208 MB, measured. The limit
+  is now total characters held, with a minimum depth kept regardless, so a large file can
+  still be undone.
+- **Undo now sizes itself to the device.** The budget is taken from the app heap Android
+  actually grants - commonly 128-256 MB even on a 6 GB phone - so a generous device keeps
+  a deep history and a constrained one still keeps a usable one. It is a tenth of that
+  heap, capped at 24 MB, because history is not the only copy of the file in memory: the
+  buffer, the layout Compose builds from it and the highlighter's styled spans are all
+  live at the same time.
 - **Line numbers flickered while editing Markdown.** The gutter read the field's current
   text against the previous frame's layout, and those disagree for a frame after every
   keystroke - so the count jumped between N and N+1. It now reads the layout's own text.
@@ -80,7 +97,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - The no-wrap width is measured from the longest line's length rather than its content.
   The editor font is monospace, so width follows character count, and typing inside a line
   that is not the longest now re-measures nothing.
-- The gutter's number cache is bounded, having been one entry per line number.
+- The gutter's number cache and the explorer's per-folder scroll positions are both
+  bounded and least-recently-used; each previously grew for the life of the process.
+- Undo's memory total is carried as a running count rather than summed on demand. It is
+  read on every push, and summing walked every snapshot in the history to answer what two
+  additions can.
+- The syntax highlighting ceiling is 250 KB (~6,000 lines), down from 300 KB. Above it a
+  file stays fully editable and loses only colour.
 - The loader is rebuilt on four shapes rather than six, so the morph never reverses back
   through states it just came from, with a 2.6s turn.
 - The folder header reads `1.5 KB · 19 items` rather than the count alone.
