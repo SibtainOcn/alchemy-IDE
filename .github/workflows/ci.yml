@@ -63,9 +63,15 @@ jobs:
       - name: Unit tests
         run: ./gradlew :app:testSummary :app:verifyTestFloor --stacktrace
 
-      # Release as well as debug: R8 shrinking is where a missing keep rule or a
-      # reflective call shows up, and that must not be discovered at tag time.
+      # Packaging runs on main only.
+      #
+      # A pull request is answering "is this change correct?", and the steps above answer
+      # it. Assembling both variants — R8 included — was adding several minutes to every
+      # PR to re-prove something no PR had changed. On main it still runs on every merge,
+      # so a shrinking problem is caught within one commit of arriving rather than at tag
+      # time.
       - name: Assemble debug and release
+        if: github.event_name == 'push'
         run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
 
       # The test count is read from the JUnit XML, so the number on the PR is always the
@@ -90,7 +96,7 @@ jobs:
           fi
 
       - name: Upload debug APK
-        if: success()
+        if: success() && github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: hazel-debug-apk
