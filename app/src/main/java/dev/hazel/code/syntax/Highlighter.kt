@@ -21,16 +21,20 @@ object Highlighter {
     /**
      * Beyond this, highlighting is skipped and plain text is shown instead.
      *
-     * The scan runs on every keystroke, so its cost is a frame budget question. Measured
-     * on a desktop JVM: ~1.4 ms at 4 KB, ~4.7 ms at 90 KB, ~7.3 ms at 225 KB, rising
-     * roughly linearly. A mid-range phone is several times slower, which puts 225 KB well
-     * past the 16 ms a frame has - so the old 300 KB ceiling guaranteed jank on exactly
-     * the files most in need of it.
+     * The scan runs on every keystroke. Measured on a desktop JVM: ~1.4 ms at 4 KB,
+     * ~4.7 ms at 90 KB, ~7.3 ms at 225 KB, rising roughly linearly.
      *
-     * 150 KB is around 3,500 lines of code. Larger files stay fully editable; they simply
-     * lose colour, which is the right way round.
+     * Those numbers argue for a low ceiling until you notice what else happens on that
+     * keystroke: Compose re-lays-out the whole document, and at 225 KB that costs far more
+     * than the scan does. Cutting the ceiling therefore removes colour from big files
+     * without making them meaningfully smoother - the jank is in the layout, not here.
+     * So the ceiling stays generous, and the honest fix is incremental highlighting that
+     * rescans only the edited region.
+     *
+     * 250 KB is around 6,000 lines. Above it, files stay fully editable and lose only
+     * colour, which is the right way round.
      */
-    const val MAX_HIGHLIGHT_CHARS = 150_000
+    const val MAX_HIGHLIGHT_CHARS = 250_000
 
     private val PY_KEYWORDS = setOf(
         "False", "None", "True", "and", "as", "assert", "async", "await", "break", "class",

@@ -33,10 +33,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   and the limit was a count: 120 snapshots of a 900 KB file is 208 MB, measured. The limit
   is now total characters held, with a minimum depth kept regardless, so a large file can
   still be undone.
-- **Highlighting made large files janky.** The scan runs on every keystroke and cost
-  ~7.3 ms at 225 KB on a desktop JVM - several times that on a phone, against a 16 ms
-  frame. The ceiling drops from 300 KB to 150 KB (~3,500 lines); larger files stay fully
-  editable and simply lose colour.
+- **Undo now sizes itself to the device.** The budget is taken from the app heap Android
+  actually grants - commonly 128-256 MB even on a 6 GB phone - so a generous device keeps
+  a deep history and a constrained one still keeps a usable one.
 - **Line numbers flickered while editing Markdown.** The gutter read the field's current
   text against the previous frame's layout, and those disagree for a frame after every
   keystroke - so the count jumped between N and N+1. It now reads the layout's own text.
@@ -80,6 +79,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   that is not the longest now re-measures nothing.
 - The gutter's number cache and the explorer's per-folder scroll positions are both
   bounded and least-recently-used; each previously grew for the life of the process.
+- The syntax highlighting ceiling is 250 KB (~6,000 lines), down from 300 KB. Above it a
+  file stays fully editable and loses only colour.
 - The loader is rebuilt on four shapes rather than six, so the morph never reverses back
   through states it just came from, with a 2.6s turn.
 - The folder header reads `1.5 KB · 19 items` rather than the count alone.

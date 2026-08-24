@@ -151,6 +151,37 @@ class UndoHistoryTest {
         assertTrue(h.undo(v("now"))!!.text.startsWith("fifth"))
     }
 
+    // ---- The budget adapts to the device ----
+
+    @Test
+    fun `the budget scales with the heap the device actually grants`() {
+        // Android grants a per-app heap, not the phone's RAM: a 6 GB device commonly caps
+        // an app at 128-256 MB, and allocating past that throws while RAM sits free.
+        val small = UndoHistory.budgetCharsFor(128L * 1024 * 1024)
+        val mid = UndoHistory.budgetCharsFor(256L * 1024 * 1024)
+        val large = UndoHistory.budgetCharsFor(512L * 1024 * 1024)
+
+        assertTrue("A bigger heap must buy more history", small < mid)
+        assertTrue("A bigger heap must buy more history", mid < large)
+    }
+
+    @Test
+    fun `the budget never exceeds a sane share of the heap`() {
+        val heap = 256L * 1024 * 1024
+        val bytesHeld = UndoHistory.budgetCharsFor(heap).toLong() * 2
+        assertTrue(
+            "Undo would claim ${bytesHeld * 100 / heap}% of the heap",
+            bytesHeld <= heap / 4,
+        )
+    }
+
+    @Test
+    fun `the budget is clamped at both ends`() {
+        // A tiny or absurd heap reading must not produce a useless or reckless budget.
+        assertEquals(4_000_000, UndoHistory.budgetCharsFor(1024))
+        assertEquals(32_000_000, UndoHistory.budgetCharsFor(64L * 1024 * 1024 * 1024))
+    }
+
     @Test
     fun `clear empties both stacks`() {
         val h = history()
