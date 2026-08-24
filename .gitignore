@@ -1,0 +1,43 @@
+# Build output
+build/
+*/build/
+.gradle/
+.cxx/
+release/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Local machine config — contains the absolute path to your Android SDK
+local.properties
+
+# Signing material. Never commit these.
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+.navigation/
+captures/
+output.json
+
+# Kotlin
+.kotlin/
+
+# Logs and profiling
+*.log
+*.hprof
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor scratch
+*.swp
+*~
