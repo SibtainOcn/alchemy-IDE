@@ -28,6 +28,18 @@ object Fmt {
         else -> String.format(Locale.US, "%.2f GB", bytes / (1024.0 * 1024 * 1024))
     }
 
+    /**
+     * The folder header line, in the shape a file manager uses: how much is here, and how
+     * many things it is spread across. Only the files listed at this level are counted -
+     * walking the tree for a true recursive total would stall the header on a big folder.
+     */
+    fun folderMeta(entries: List<Entry>): String {
+        val bytes = entries.filterNot { it.isDir }.sumOf { it.sizeBytes }
+        val count = entries.size
+        val items = if (count == 1) "1 item" else "$count items"
+        return if (bytes > 0) size(bytes) + "  ·  " + items else items
+    }
+
     fun subtitle(entry: Entry): String = when {
         !entry.isDir -> size(entry.sizeBytes)
         entry.childCount < 0 -> "Locked"

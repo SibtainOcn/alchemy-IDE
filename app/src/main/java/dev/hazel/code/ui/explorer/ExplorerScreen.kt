@@ -130,6 +130,9 @@ fun ExplorerScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        // The bars apply the status-bar inset themselves. Letting Scaffold apply it too
+        // was the empty strip above the header on every screen.
+        contentWindowInsets = WindowInsets(0),
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
             FloatingActionButton(
@@ -143,7 +146,7 @@ fun ExplorerScreen(
             }
         },
     ) { pad ->
-        Column(Modifier.fillMaxSize().padding(top = pad.calculateTopPadding())) {
+        Column(Modifier.fillMaxSize().padding(pad)) {
 
             ExplorerBar(
                 state = state,
@@ -356,7 +359,7 @@ private fun ExplorerBar(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            text = "${state.visible.size} items",
+                            text = Fmt.folderMeta(state.visible),
                             style = MaterialTheme.typography.bodySmall,
                             color = TextLow,
                         )
