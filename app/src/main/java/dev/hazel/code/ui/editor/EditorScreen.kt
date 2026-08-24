@@ -346,7 +346,7 @@ private fun EditorBar(
 
         if (showPreviewToggle) {
             BarIcon(
-                if (previewing) Ico.Code else Ico.Eye,
+                if (previewing) Ico.Code else Ico.Book,
                 if (previewing) "Edit source" else "Preview",
                 tint = if (previewing) MaterialTheme.colorScheme.primary else TextHigh,
                 onClick = onTogglePreview,

@@ -29,6 +29,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   tests. Packaging (debug + release through R8) runs on `main`.
 
 ### Fixed
+- **Line numbers flickered while editing Markdown.** The gutter read the field's current
+  text against the previous frame's layout, and those disagree for a frame after every
+  keystroke - so the count jumped between N and N+1. It now reads the layout's own text.
+  Python files were affected too; Markdown just re-lays-out often enough to make it
+  visible.
+- **The current line was not findable.** The row band was `#0D0D0D` on true black -
+  present in the buffer, absent to the eye. It is now visible and continues across the
+  gutter, so the active row reads as one line rather than two halves, with its number
+  brightened.
+- **Cyan leaked onto ordinary Markdown text.** Bold prose in the editor and inline code in
+  the preview were both tinted with the accent, which made half a table look like links
+  and left nothing distinct for actual links. Bold is now weight rather than colour, and
+  inline code is monospace on a tinted chip; the accent means "link".
 - **Markdown preview was unreadable on real READMEs.** Every non-blank line was folded
   into one paragraph, so a table arrived as a wall of pipes. Block starts now interrupt
   the paragraph before them. Empty and ragged table cells are kept rather than dropped, so
@@ -45,6 +58,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   Gradle started.
 
 ### Changed
+- **The key bar is one row and every key can be dragged**, Ctrl and Tab included. Pinning
+  four keys cost their width on every screen and stopped exactly the keys people most want
+  to move from being moved.
+- **Shift and Caps are gone.** The IME already has both, and a second competing idea of
+  "shifted" earned nothing. Outdent keeps its own key, so nothing became unreachable.
+- The Markdown preview toggle is an open book rather than an eye. The question in a
+  Markdown file is which of two forms you are reading, not whether something is hidden.
+- Toolbar edits, highlighting, Markdown parsing and clipboard reads are wrapped so a
+  failure in any of them leaves the text untouched instead of taking the screen down.
+- The no-wrap width is measured from the longest line's length rather than its content.
+  The editor font is monospace, so width follows character count, and typing inside a line
+  that is not the longest now re-measures nothing.
+- The gutter's number cache is bounded, having been one entry per line number.
 - The loader is rebuilt on four shapes rather than six, so the morph never reverses back
   through states it just came from, with a 2.6s turn.
 - The folder header reads `1.5 KB · 19 items` rather than the count alone.

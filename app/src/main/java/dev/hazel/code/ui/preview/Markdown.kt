@@ -42,6 +42,7 @@ import dev.hazel.code.ui.theme.CodeFont
 import dev.hazel.code.ui.theme.Hairline
 import dev.hazel.code.ui.theme.InkHigh
 import dev.hazel.code.ui.theme.InkRaised
+import dev.hazel.code.ui.theme.HazelAccents
 import dev.hazel.code.ui.theme.LocalAccents
 import dev.hazel.code.ui.theme.Radii
 import dev.hazel.code.ui.theme.TextHigh
@@ -63,7 +64,13 @@ private val TABLE_COLUMN_WIDTH = 168.dp
 @Composable
 fun MarkdownView(text: String, modifier: Modifier = Modifier) {
     val a = LocalAccents.current
-    val blocks = remember(text) { MarkdownParser.parse(text) }
+    val primary = MaterialTheme.colorScheme.primary
+    val blocks = remember(text) {
+        // A parse failure should show the document as one plain block, not an error
+        // screen: the point of the preview is to read the file.
+        runCatching { MarkdownParser.parse(text) }
+            .getOrElse { listOf(MdBlock.Paragraph(text)) }
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
@@ -75,7 +82,7 @@ fun MarkdownView(text: String, modifier: Modifier = Modifier) {
             when (val block = blocks[index]) {
                 is MdBlock.Heading -> HeadingBlock(block)
                 is MdBlock.Paragraph -> Text(
-                    inline(block.text, a.builtin),
+                    remember(block) { inline(block.text, a, primary) },
                     style = MaterialTheme.typography.bodyLarge,
                     color = TextMid,
                     modifier = Modifier.padding(vertical = 5.dp),
@@ -100,7 +107,7 @@ private fun HeadingBlock(block: MdBlock.Heading) {
     val a = LocalAccents.current
     Spacer(Modifier.height(if (block.level <= 2) 18.dp else 12.dp))
     Text(
-        inline(block.text, a.builtin),
+        inline(block.text, a, MaterialTheme.colorScheme.primary),
         style = when (block.level) {
             1 -> MaterialTheme.typography.headlineSmall
             2 -> MaterialTheme.typography.titleLarge
@@ -179,7 +186,7 @@ private fun TableBlock(block: MdBlock.Table) {
                 Row(Modifier.background(if (rowIndex % 2 == 1) InkRaised else Color.Transparent)) {
                     row.forEachIndexed { i, cell ->
                         TableCell(
-                            text = inline(cell, a.builtin),
+                            text = inline(cell, a, MaterialTheme.colorScheme.primary),
                             align = block.alignments.getOrElse(i) { MdAlign.START },
                             color = TextMid,
                         )
@@ -259,7 +266,7 @@ private fun ItemBlock(block: MdBlock.Item) {
             }
         }
         Text(
-            inline(block.text, a.builtin),
+            inline(block.text, a, MaterialTheme.colorScheme.primary),
             style = MaterialTheme.typography.bodyLarge,
             color = if (block.checked == true) TextMid.copy(alpha = 0.6f) else TextMid,
             textDecoration = if (block.checked == true) TextDecoration.LineThrough else null,
@@ -283,7 +290,7 @@ private fun QuoteBlock(block: MdBlock.Quote) {
         )
         Spacer(Modifier.width(12.dp))
         Text(
-            inline(block.text, a.builtin),
+            inline(block.text, a, MaterialTheme.colorScheme.primary),
             style = MaterialTheme.typography.bodyLarge,
             color = a.comment,
             fontStyle = FontStyle.Italic,
@@ -296,7 +303,7 @@ private fun QuoteBlock(block: MdBlock.Quote) {
  * escapes. Anything unterminated is emitted as the literal characters rather than
  * swallowing the rest of the line.
  */
-internal fun inline(src: String, accent: Color): AnnotatedString = buildAnnotatedString {
+internal fun inline(src: String, a: HazelAccents, link: Color): AnnotatedString = buildAnnotatedString {
     var i = 0
     while (i < src.length) {
         val c = src[i]
@@ -308,7 +315,17 @@ internal fun inline(src: String, accent: Color): AnnotatedString = buildAnnotate
             c == '`' -> {
                 val end = src.indexOf('`', i + 1)
                 if (end > i) {
-                    withStyle(SpanStyle(fontFamily = CodeFont, color = accent, fontSize = 13.5.sp)) {
+                    // Inline code is monospace on a tinted chip, the way every Markdown
+                    // reader renders it. Colouring it cyan made half a table look like
+                    // links, and left nothing distinct for actual links.
+                    withStyle(
+                        SpanStyle(
+                            fontFamily = CodeFont,
+                            color = a.codeText,
+                            background = InkHigh,
+                            fontSize = 13.5.sp,
+                        )
+                    ) {
                         append(src.substring(i + 1, end))
                     }
                     i = end + 1; continue
@@ -364,7 +381,7 @@ internal fun inline(src: String, accent: Color): AnnotatedString = buildAnnotate
                 if (close > i && src.getOrNull(close + 1) == '(') {
                     val paren = src.indexOf(')', close)
                     if (paren > close) {
-                        withStyle(SpanStyle(color = accent, textDecoration = TextDecoration.Underline)) {
+                        withStyle(SpanStyle(color = link, textDecoration = TextDecoration.Underline)) {
                             append(src.substring(i + 1, close))
                         }
                         i = paren + 1; continue

@@ -100,7 +100,9 @@ data class HazelAccents(
     // was dark enough that only the current line showed.
     val gutter: Color = Color(0xFF6B6B78),
     val gutterActive: Color = Color(0xFF0FCBE8),
-    val caretLine: Color = Color(0xFF0D0D0D),
+    // The current-row band. #0D0D0D on true black was present in the buffer and absent
+    // to the eye; this is still quiet but actually locates the caret.
+    val caretLine: Color = Color(0xFF17171C),
 )
 
 val LocalAccents = compositionLocalOf { HazelAccents() }

@@ -77,6 +77,24 @@ object Ico {
     val Hash = stroked("hash", "M9.5 4 L7.5 20", "M16.5 4 L14.5 20", "M4.5 9 L20 9", "M4 15 L19.5 15")
     val Code = stroked("code", "M8.5 8 L4 12 L8.5 16", "M15.5 8 L20 12 L15.5 16", "M13.5 5 L10.5 19")
     val Eye = stroked("eye", "M2.8 12S6.4 5.8 12 5.8 21.2 12 21.2 12 17.6 18.2 12 18.2 2.8 12 2.8 12Z", "M12 9.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0 -5.6")
+
+    /**
+     * An open book, for the rendered-Markdown toggle. An eye means "show/hide"; the
+     * question in a Markdown file is which of two forms you are reading, and a book
+     * against the `</>` glyph says that without a caption.
+     */
+    val Book = stroked(
+        "book",
+        // Spine, then the ruled lines suggesting text on each page.
+        "M12 5.85 V21",
+        "M5 9 L9 10",
+        "M19 9 L15 10",
+        "M5 13 L9 14",
+        "M19 13 L15 14",
+        // The two covers, drawn as one outline that meets at the spine.
+        "M12 5.85C11.2 5.4 10.4 4.9 9.6 4.5 8.3 3.8 6.5 3.2 4.9 3.05 3.9 2.95 3 3.7 3 4.7v11.15c0 .85.7 1.55 1.55 1.6 1.5.1 3.2.28 4.45.62 1.2.32 2.5.95 3.5 1.48",
+        "M12 5.85c.8-.45 1.6-.95 2.4-1.35 1.3-.7 3.1-1.3 4.7-1.45 1-.1 1.9.65 1.9 1.65v11.15c0 .85-.7 1.55-1.55 1.6-1.5.1-3.2.28-4.45.62-1.2.32-2.5.95-3.5 1.48",
+    )
     val Trash = stroked("trash", "M4.5 7 L19.5 7", "M9.5 7 V4.8h5V7", "M6.5 7 L7.5 19.6c0 .5.4.9.9.9h7.2c.5 0 .9-.4.9-.9L17.5 7", "M10 11 L10 17", "M14 11 L14 17")
     val Pencil = stroked("pencil", "M4.5 19.5 L5.2 15.6 L16.1 4.7a1.6 1.6 0 0 1 2.3 0l1.7 1.7a1.6 1.6 0 0 1 0 2.3L9.2 19.6 Z", "M14.5 6.5 L17.9 9.9")
     val Copy = stroked("copy", "M9 9.2c0-.7.5-1.2 1.2-1.2h8.1c.7 0 1.2.5 1.2 1.2v9.1c0 .7-.5 1.2-1.2 1.2h-8.1c-.7 0-1.2-.5-1.2-1.2Z", "M15 8V5.7c0-.7-.5-1.2-1.2-1.2H5.7c-.7 0-1.2.5-1.2 1.2v8.1c0 .7.5 1.2 1.2 1.2H8")
