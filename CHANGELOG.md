@@ -4,6 +4,44 @@ All notable changes to Hazel IDE are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Key bar modifiers.** Ctrl, Shift, Caps and Tab, pinned so they never scroll out of
+  reach. Ctrl and Shift latch for one key; Caps locks. Arming Ctrl swaps the scrolling
+  group for a shortcut set (save, undo, redo, select all, copy, cut, paste).
+- **Caret keys.** Arrows, home and end, with Shift to extend the selection — none of which
+  a phone keyboard offers.
+- **Draggable key bar.** Long-press any key and drag it into place. Saved per language; a
+  saved order survives the key set changing between versions.
+- **Markdown tables**, with alignment, horizontal scroll and fixed column widths. Also
+  task lists, nested and ordered lists, setext headings and backslash escapes.
+- **Test tooling.** `:app:testSummary` reports real counts from the JUnit XML;
+  `:app:verifyTestFloor` fails if the suite shrinks below the recorded floor.
+- **CI** on every pull request: Gradle script syntax, Kotlin compile, Android Lint and
+  tests. Packaging (debug + release through R8) runs on `main`.
+
+### Fixed
+- **Markdown preview was unreadable on real READMEs.** Every non-blank line was folded
+  into one paragraph, so a table arrived as a wall of pipes. Block starts now interrupt
+  the paragraph before them. Empty and ragged table cells are kept rather than dropped, so
+  columns stay aligned.
+- **A dead strip at the top of every screen.** `Scaffold` applied the status-bar inset and
+  the bars applied it again.
+- **Line numbers were invisible.** Inactive numbers were `#3A3A3F` on true black; only the
+  current line could be read.
+- **`print(x)` rendered cyan.** The builtin list was consulted before the call check;
+  Monokai paints a call green whether or not the name is a builtin.
+- **The text-size row in the editor menu stacked vertically.** The dropdown had no fixed
+  width, so the stepper was squeezed until it wrapped.
+- **`gradlew` was committed without its executable bit**, so every CI step failed before
+  Gradle started.
+
+### Changed
+- The loader is rebuilt on four shapes rather than six, so the morph never reverses back
+  through states it just came from, with a 2.6s turn.
+- The folder header reads `1.5 KB · 19 items` rather than the count alone.
+
 ## [1.0.0] — 2026-08-24
 
 First release. A file browser and a code editor, and deliberately nothing else: no
