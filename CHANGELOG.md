@@ -39,6 +39,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   a local order and is saved on release, so a key goes wherever it is dropped; holding it
   against either edge scrolls the row underneath it, which is what makes the far end of
   the bar reachable in one gesture.
+- **Undo could run the app out of memory.** Each snapshot is a whole copy of the buffer,
+  and the limit was a count: 120 snapshots of a 900 KB file is 208 MB, measured. The limit
+  is now total characters held, with a minimum depth kept regardless, so a large file can
+  still be undone.
+- **Highlighting made large files janky.** The scan runs on every keystroke and cost
+  ~7.3 ms at 225 KB on a desktop JVM - several times that on a phone, against a 16 ms
+  frame. The ceiling drops from 300 KB to 150 KB (~3,500 lines); larger files stay fully
+  editable and simply lose colour.
 - **Line numbers flickered while editing Markdown.** The gutter read the field's current
   text against the previous frame's layout, and those disagree for a frame after every
   keystroke - so the count jumped between N and N+1. It now reads the layout's own text.
@@ -80,7 +88,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - The no-wrap width is measured from the longest line's length rather than its content.
   The editor font is monospace, so width follows character count, and typing inside a line
   that is not the longest now re-measures nothing.
-- The gutter's number cache is bounded, having been one entry per line number.
+- The gutter's number cache and the explorer's per-folder scroll positions are both
+  bounded and least-recently-used; each previously grew for the life of the process.
 - The loader is rebuilt on four shapes rather than six, so the morph never reverses back
   through states it just came from, with a 2.6s turn.
 - The folder header reads `1.5 KB · 19 items` rather than the count alone.
