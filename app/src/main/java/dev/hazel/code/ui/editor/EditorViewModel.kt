@@ -157,7 +157,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         if (next.text != current.text) {
-            history.recordDiscrete(current)
+            history.recordDiscrete(current, next)
             syncHistoryFlags()
         }
         commit(next)
