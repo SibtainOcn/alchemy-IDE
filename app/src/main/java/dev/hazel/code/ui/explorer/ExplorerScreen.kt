@@ -141,7 +141,7 @@ fun ExplorerScreen(
         }
     }
 
-    TerminalSheet(terminal)
+    TerminalSheet(terminal, onOpenFile = onOpenFile)
 
     if (setupOpen) {
         RunnerSetupDialog(vm = setup, onDismiss = { setupOpen = false })

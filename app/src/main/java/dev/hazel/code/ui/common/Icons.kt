@@ -153,6 +153,9 @@ object Ico {
             "103,-104 -104,-104 57,-56 160,160 -160,160Zm180,0v-80h240v80H480Z",
     )
 
+    /** Walk back through what has been typed. An arrow up, as every shell has taught. */
+    val HistoryUp = stroked("historyUp", "M12 19 L12 6", "M6.5 11.5 L12 6 L17.5 11.5")
+
     val Wrench = stroked("wrench", "M15.6 4.6a5 5 0 0 0 -6 6.4L4.6 16a2 2 0 0 0 2.8 2.8l5-5a5 5 0 0 0 6.4-6l-3 3-2.2-2.2Z")
 }
 

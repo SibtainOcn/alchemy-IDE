@@ -46,6 +46,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.hazel.code.exec.ConsoleLine
+import java.io.File
 import dev.hazel.code.ui.common.Ico
 import dev.hazel.code.ui.common.ShapeLoader
 import dev.hazel.code.ui.common.rememberCopyToClipboard
@@ -72,7 +73,7 @@ import dev.hazel.code.ui.theme.TextMid
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TerminalSheet(vm: TerminalViewModel) {
+fun TerminalSheet(vm: TerminalViewModel, onOpenFile: (File) -> Unit = {}) {
     if (!vm.open) return
 
     // Straight to full height. A half sheet put the prompt below the fold, which is the
@@ -102,7 +103,11 @@ fun TerminalSheet(vm: TerminalViewModel) {
                 .fillMaxHeight(0.94f)
                 .imePadding()
         ) {
-            Header(vm)
+            Header(
+                vm = vm,
+                onRecall = { recalled -> input = recalled },
+                onOpenFile = onOpenFile,
+            )
             Box(Modifier.fillMaxWidth().height(0.7.dp).background(Hairline))
 
             // Selectable, because the first thing anyone does with an error they do not
@@ -137,7 +142,11 @@ fun TerminalSheet(vm: TerminalViewModel) {
 }
 
 @Composable
-private fun Header(vm: TerminalViewModel) {
+private fun Header(
+    vm: TerminalViewModel,
+    onRecall: (String) -> Unit,
+    onOpenFile: (File) -> Unit,
+) {
     var menuOpen by remember { mutableStateOf(false) }
     val copy = rememberCopyToClipboard()
 
@@ -157,6 +166,14 @@ private fun Header(vm: TerminalViewModel) {
         if (vm.running) {
             ShapeLoader(size = 16.dp)
             Spacer(Modifier.width(12.dp))
+        }
+
+        // Writes the command into the prompt rather than running it, so it can be edited
+        // first. Tapping again walks further back, the way a shell's up arrow does.
+        if (vm.hasHistory) {
+            SmallAction(Ico.HistoryUp, "Previous command") {
+                vm.recallPrevious()?.let(onRecall)
+            }
         }
 
         SmallAction(Ico.Trash, "Clear") { vm.clear() }
@@ -215,6 +232,32 @@ private fun Header(vm: TerminalViewModel) {
                     text = {
                         Text(
                             "Copy everything",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextHigh,
+                        )
+                    },
+                )
+
+                DropdownMenuItem(
+                    onClick = {
+                        menuOpen = false
+                        vm.close()
+                        onOpenFile(vm.historyFile())
+                    },
+                    text = {
+                        Text(
+                            "Command history",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextHigh,
+                        )
+                    },
+                )
+
+                DropdownMenuItem(
+                    onClick = { menuOpen = false; vm.clearHistory() },
+                    text = {
+                        Text(
+                            "Clear history",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextHigh,
                         )

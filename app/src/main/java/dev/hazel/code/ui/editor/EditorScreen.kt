@@ -101,6 +101,8 @@ fun EditorScreen(
     vm: EditorViewModel,
     file: File,
     onClose: () -> Unit,
+    /** Switches the editor to another file, for the terminal's own history. */
+    onOpenFile: (File) -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     val copyToClipboard = rememberCopyToClipboard()
@@ -330,7 +332,7 @@ fun EditorScreen(
         }
     }
 
-    TerminalSheet(terminal)
+    TerminalSheet(terminal, onOpenFile = onOpenFile)
 
     if (setupOpen) {
         RunnerSetupDialog(vm = setup, onDismiss = { setupOpen = false })

@@ -320,13 +320,13 @@ distinguishes "no answer came" from "an answer came too late".
 The parts that can be tested without a device are, and they are the parts that were wrong
 in ways a test could have caught:
 
-- `RuntimeTest` — extension mapping, shell quoting of paths with spaces and quotes, the C
+- `RuntimeTest`: extension mapping, shell quoting of paths with spaces and quotes, the C
   command compiling into `TMPDIR`, every runtime having packages and a probe.
-- `ConsoleTest` — `cd` recognition, path resolution including `..` past the root, tilde,
+- `ConsoleTest`: `cd` recognition, path resolution including `..` past the root, tilde,
   compound commands left alone, timing summaries.
-- `InstallPlannerTest` — skipping what is present, smallest first, deduplicating packages,
+- `InstallPlannerTest`: skipping what is present, smallest first, deduplicating packages,
   extracting the useful line from apt output.
-- `TermuxReadinessTest` (F-Droid only) — the ladder in order, the Play Store copy called
+- `TermuxReadinessTest` (F-Droid only): the ladder in order, the Play Store copy called
   out specifically, the setup line repairing rather than appending, the handshake being
   instant.
 

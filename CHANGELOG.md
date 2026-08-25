@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **Command history in the terminal.** An up arrow in the header writes the previous
+  command into the prompt rather than running it, so it can be edited first, and tapping
+  again walks further back. Every command typed is kept in a plain text file in the app's
+  own private storage, so the history survives a restart; the terminal menu opens that
+  file in the editor like any other text file, and clears it in one action. Bounded to the
+  last 500 commands, because a terminal used for a year is a file nobody meant to keep.
 - **A Logs button on the language installer**, which puts everything the package manager
   printed into the terminal, unedited. A failed install is a few hundred lines of apt with
   one useful line somewhere in it, and a dialog has room for one line.
