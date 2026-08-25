@@ -19,7 +19,16 @@ object Termux {
     const val EXTRA_WORKDIR = "com.termux.RUN_COMMAND_WORKDIR"
     const val EXTRA_BACKGROUND = "com.termux.RUN_COMMAND_BACKGROUND"
     const val EXTRA_SESSION_ACTION = "com.termux.RUN_COMMAND_SESSION_ACTION"
-    const val EXTRA_RESULT_PENDING_INTENT = "com.termux.RUN_COMMAND_RESULT_PENDING_INTENT"
+    /**
+     * Where Termux sends the output.
+     *
+     * The name has no RESULT in it, unlike every key inside the bundle it delivers. Get it
+     * wrong and nothing at all goes wrong: Termux takes the command, runs it, finds no
+     * pending intent under the name it looks for, and drops the output on the floor. No
+     * error, no reply, and a caller waiting for something that was never going to arrive.
+     * Verified against the extras in Termux 0.119's own dex rather than from memory.
+     */
+    const val EXTRA_RESULT_PENDING_INTENT = "com.termux.RUN_COMMAND_PENDING_INTENT"
 
     /** Termux packs everything it returns into one bundle under this key. */
     const val EXTRA_RESULT_BUNDLE = "result"
@@ -27,6 +36,15 @@ object Termux {
     const val RESULT_STDERR = "stderr"
     const val RESULT_EXIT_CODE = "exitCode"
     const val RESULT_ERR = "err"
+
+    /**
+     * What Termux puts in [RESULT_ERR] when nothing went wrong.
+     *
+     * Minus one, not zero: its Errno type numbers success as -1 and real failures above
+     * zero. Reading a missing key as zero and treating zero as an error turns every
+     * successful command into a failed one, which is exactly what it did.
+     */
+    const val ERR_SUCCESS = -1
 
     /**
      * How much the program really wrote, when the result had to be cut to fit.

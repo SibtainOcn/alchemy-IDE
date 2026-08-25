@@ -94,6 +94,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   tests. Packaging (debug + release through R8) runs on `main`.
 
 ### Fixed
+- **Nothing the terminal sent ever came back.** The extra naming the callback was
+  `com.termux.RUN_COMMAND_RESULT_PENDING_INTENT`; Termux looks for
+  `com.termux.RUN_COMMAND_PENDING_INTENT`, with no RESULT in it, unlike every key inside
+  the bundle it delivers. Nothing went wrong anywhere: Termux took each command, ran it,
+  found no callback under the name it looks for, and dropped the output. Confirmed against
+  the extras in Termux 0.119's own dex on a device, not from memory.
+- **Every successful command was reported as a failure.** Termux numbers success as `-1`
+  in its error field, not `0`, so treating a non-zero value as a problem condemned every
+  command that worked.
+- **The reply is delivered to a manifest receiver** rather than one registered at runtime.
+  A PendingIntent aimed at an explicit component has no question to answer about whether
+  it is exported, and reaches the app whether or not it is in memory.
 - **Every command hung for a minute and then said "Timed out".** Termux refuses a command
   from an app it has not been told to trust by posting a notification of its own and never
   replying, so the terminal sat waiting for an answer that was never coming while the real

@@ -1,21 +1,19 @@
 package dev.hazel.code.exec
 
 import android.app.PendingIntent
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.content.pm.PackageInfoCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
 
 /**
@@ -34,8 +32,6 @@ import kotlin.coroutines.resume
  * it in with every request.
  */
 class TermuxExecutionProvider(private val context: Context) : ExecutionProvider {
-
-    private val requestIds = AtomicInteger(0)
 
     /**
      * The last cheap check and when it was taken.
@@ -106,12 +102,18 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
 
     /** Sends a command without asking again whether it is worth sending. */
     private suspend fun send(request: RunRequest): RunResult {
-        // A distinct action per request. Two runs in flight would otherwise deliver to
-        // each other's receiver, and the second result would be attributed to the first.
-        val action = "${context.packageName}.TERMUX_RESULT.${requestIds.incrementAndGet()}"
+        // One id per request, carried out with the PendingIntent and back with the reply.
+        // Two commands in flight would otherwise collect each other's answers.
+        val id = TermuxResults.nextId()
+        Log.d(TermuxResults.TAG, "request $id: ${request.command.take(120)}")
 
-        return withTimeoutOrNull(request.timeoutMs) { awaitResult(action, request) }
-            ?: RunResult(failure = RunFailure.TimedOut)
+        val result = withTimeoutOrNull(request.timeoutMs) { awaitResult(id, request) }
+        if (result == null) {
+            TermuxResults.forget(id)
+            Log.w(TermuxResults.TAG, "request $id: no reply within ${request.timeoutMs}ms")
+            return RunResult(failure = RunFailure.TimedOut)
+        }
+        return result
     }
 
     override val setupGuide: SetupGuide get() = Termux.SETUP_GUIDE
@@ -188,37 +190,30 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
         }
     }
 
-    private suspend fun awaitResult(action: String, request: RunRequest): RunResult =
+    /**
+     * Sends one command and waits for the reply the receiver will hand back.
+     *
+     * The wait is registered before the command goes out, because a fast command can
+     * answer before this function has finished starting.
+     */
+    private suspend fun awaitResult(id: Int, request: RunRequest): RunResult =
         suspendCancellableCoroutine { continuation ->
-            var registered = true
-            val receiver = object : BroadcastReceiver() {
-                override fun onReceive(from: Context?, intent: Intent?) {
-                    unregister(this) { registered = false }
-                    if (continuation.isActive) continuation.resume(resultOf(intent))
-                }
+            TermuxResults.expect(id) { bundle ->
+                if (continuation.isActive) continuation.resume(resultOf(bundle))
             }
-
-            // Not exported: the broadcast is sent by Termux but with this app's identity,
-            // because the PendingIntent belongs to this app. Nothing outside can reach it.
-            ContextCompat.registerReceiver(
-                context,
-                receiver,
-                IntentFilter(action),
-                ContextCompat.RECEIVER_NOT_EXPORTED,
-            )
-            continuation.invokeOnCancellation {
-                if (registered) unregister(receiver) { registered = false }
-            }
+            continuation.invokeOnCancellation { TermuxResults.forget(id) }
 
             val callback = PendingIntent.getBroadcast(
                 context,
-                0,
-                Intent(action).setPackage(context.packageName),
+                id,
+                Intent(context, TermuxResultReceiver::class.java)
+                    .putExtra(TermuxResults.EXTRA_REQUEST_ID, id),
                 pendingIntentFlags(),
             )
 
             runCatching { dispatch(request, callback) }.onFailure { error ->
-                if (registered) unregister(receiver) { registered = false }
+                Log.w(TermuxResults.TAG, "could not hand the command to Termux", error)
+                TermuxResults.forget(id)
                 if (continuation.isActive) {
                     continuation.resume(
                         RunResult(
@@ -255,17 +250,20 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
      * command that fails on purpose is a successful run with a non-zero exit code, and
      * the two must not be reported the same way.
      */
-    private fun resultOf(intent: Intent?): RunResult {
-        val bundle = intent?.getBundleExtra(Termux.EXTRA_RESULT_BUNDLE)
-            ?: return RunResult(
+    private fun resultOf(bundle: Bundle?): RunResult {
+        if (bundle == null) {
+            return RunResult(
                 stderr = "Termux sent an empty result",
                 failure = RunFailure.Failed,
             )
+        }
 
         val stdout = bundle.getString(Termux.RESULT_STDOUT).orEmpty()
         val stderr = bundle.getString(Termux.RESULT_STDERR).orEmpty()
         val message = bundle.getString(Termux.RESULT_ERRMSG)
-        val termuxError = bundle.getInt(Termux.RESULT_ERR, 0)
+        // Anything above zero is a Termux-side failure. Success is -1, and an absent key
+        // has to read as success too, or a working command is reported as a broken one.
+        val termuxError = bundle.getInt(Termux.RESULT_ERR, Termux.ERR_SUCCESS)
         val stdoutLength = lengthOf(bundle, Termux.RESULT_STDOUT_LENGTH, stdout.length)
         val stderrLength = lengthOf(bundle, Termux.RESULT_STDERR_LENGTH, stderr.length)
 
@@ -280,7 +278,7 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
 
             // Termux could not run the thing. Whatever it managed to say is kept as well
             // as its own explanation, because either one might be the answer.
-            termuxError != 0 -> RunResult(
+            termuxError > 0 -> RunResult(
                 stdout = stdout,
                 stderr = listOf(stderr, message.orEmpty()).filter { it.isNotBlank() }.joinToString("\n"),
                 failure = RunFailure.Failed,
@@ -311,10 +309,6 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
         return bundle.getString(key)?.trim()?.toIntOrNull() ?: fallback
     }
 
-    private fun unregister(receiver: BroadcastReceiver, onDone: () -> Unit) {
-        runCatching { context.unregisterReceiver(receiver) }
-        onDone()
-    }
 
     private fun pendingIntentFlags(): Int {
         var flags = PendingIntent.FLAG_UPDATE_CURRENT

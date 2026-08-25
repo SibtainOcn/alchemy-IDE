@@ -2,8 +2,8 @@
 <!--
   Merged into the shared manifest for the F-Droid and GitHub build only.
 
-  Neither of these reaches the Play Store build: they are not conditionally disabled
-  there, they are not part of that variant at all.
+  None of this reaches the Play Store build: it is not conditionally disabled there, it is
+  not part of that variant at all.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -22,5 +22,20 @@
     <queries>
         <package android:name="com.termux" />
     </queries>
+
+    <application>
+
+        <!--
+          Where Termux's answer lands.
+
+          Not exported: nothing outside this app can reach it. It does not need to be,
+          because the PendingIntent handed to Termux names this component explicitly, and
+          a PendingIntent carries the identity of the app that created it.
+        -->
+        <receiver
+            android:name=".exec.TermuxResultReceiver"
+            android:exported="false" />
+
+    </application>
 
 </manifest>
