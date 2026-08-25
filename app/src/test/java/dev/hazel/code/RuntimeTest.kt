@@ -75,7 +75,11 @@ class RuntimeTest {
         // would compile and then be refused at the moment it was run.
         val command = Runtime.C.commandFor("/sdcard/code/hello.c")
         assertTrue("Compiles the source", command.startsWith("clang '/sdcard/code/hello.c'"))
-        assertTrue("Writes the program into TMPDIR", command.contains("\$TMPDIR/hazel-run"))
+        assertTrue("Writes the program into TMPDIR", command.contains("TMPDIR"))
+        assertTrue(
+            "Falls back to a real path when TMPDIR is unset, rather than to the root",
+            command.contains(Runtime.TERMUX_TMP),
+        )
         assertTrue("Runs it only if the compile succeeded", command.contains("&&"))
     }
 

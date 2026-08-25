@@ -78,13 +78,26 @@ enum class Runtime(
             PYTHON -> "python $file"
             GO -> "go run $file"
             C -> {
-                val binary = "\"\$TMPDIR/hazel-run\""
+                // TMPDIR is set for Termux's own shells, but a process started through
+                // RunCommandService does not always inherit the same environment, and an
+                // unset variable would compile to "/hazel-run" at the filesystem root and
+                // fail there. The fallback is the path TMPDIR points at anyway.
+                val binary = "\"\${TMPDIR:-$TERMUX_TMP}/hazel-run\""
                 "clang $file -o $binary && $binary"
             }
         }
     }
 
     companion object {
+        /**
+         * Where Termux keeps files that are allowed to be executed.
+         *
+         * Named here rather than in the Termux-only source set because the command that
+         * uses it is shared: the catalogue has to be readable by both builds even though
+         * only one of them can act on it.
+         */
+        const val TERMUX_TMP = "/data/data/com.termux/files/usr/tmp"
+
         /**
          * The runtime that claims [fileName], or null when nothing here runs it.
          *
