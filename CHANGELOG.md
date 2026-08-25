@@ -44,6 +44,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   tests. Packaging (debug + release through R8) runs on `main`.
 
 ### Fixed
+- **The starting window drew the old, filled mark.** The launcher icon was corrected but
+  the splash drawable was not, so the app opened on the blob for a moment and then swapped
+  to the outlined bolt once its own screens took over. Both are stroked now.
 - **The launcher icon was a blob rather than a bolt.** The mark is an open curve meant to
   be stroked; it was being filled as well, which closes it through the shortest line
   between its ends and fattened the shape until it read as a smudge at icon size. It is
