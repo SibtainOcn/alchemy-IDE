@@ -27,6 +27,15 @@ object Termux {
     const val RESULT_STDERR = "stderr"
     const val RESULT_EXIT_CODE = "exitCode"
     const val RESULT_ERR = "err"
+
+    /**
+     * How much the program really wrote, when the result had to be cut to fit.
+     *
+     * Termux reports these alongside the text so a caller can tell a short program from a
+     * truncated one.
+     */
+    const val RESULT_STDOUT_LENGTH = "stdout_original_length"
+    const val RESULT_STDERR_LENGTH = "stderr_original_length"
     const val RESULT_ERRMSG = "errmsg"
 
     /** Where Termux keeps the programs it has installed. */

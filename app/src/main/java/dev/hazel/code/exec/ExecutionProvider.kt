@@ -48,6 +48,14 @@ interface ExecutionProvider {
     /** An intent that opens the runner app, or null when there is nothing to open. */
     fun launchIntent(): Intent?
 
+    /**
+     * The runner's own home directory, which is where `~` and a bare `cd` lead.
+     *
+     * Not the same place as anything this app can write to: the runner keeps its own
+     * private storage, and that is where it starts.
+     */
+    val homeDirectory: String?
+
     /** Whether [runtime] is installed and on PATH. False when that cannot be established. */
     suspend fun isInstalled(runtime: Runtime): Boolean
 
@@ -83,7 +91,21 @@ data class RunResult(
     val stderr: String = "",
     val exitCode: Int? = null,
     val failure: RunFailure? = null,
+
+    /**
+     * What the program actually wrote, when more of it was written than came back.
+     *
+     * Output crosses a process boundary with a size limit on it, so a program that prints
+     * a great deal has its output cut. Silently showing the surviving part as if it were
+     * everything is how someone spends an hour looking for the rest of a stack trace, so
+     * the full lengths are carried and the terminal says so.
+     */
+    val stdoutFullLength: Int = stdout.length,
+    val stderrFullLength: Int = stderr.length,
 ) {
+    val stdoutTruncated: Boolean get() = stdoutFullLength > stdout.length
+    val stderrTruncated: Boolean get() = stderrFullLength > stderr.length
+
     val succeeded: Boolean get() = failure == null && exitCode == 0
 }
 

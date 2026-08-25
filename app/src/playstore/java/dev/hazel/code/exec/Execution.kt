@@ -29,6 +29,8 @@ object NoExecutionProvider : ExecutionProvider {
 
     override fun launchIntent(): Intent? = null
 
+    override val homeDirectory: String? get() = null
+
     override suspend fun isInstalled(runtime: Runtime): Boolean = false
 
     override suspend fun install(runtimes: List<Runtime>, onState: (Runtime, InstallState) -> Unit) {

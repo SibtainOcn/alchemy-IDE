@@ -7,6 +7,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **A terminal, as a sheet over the editor.** Two buttons in the editor bar, F-Droid
+  build only: the terminal opens a console on the folder of the file you are editing and
+  waits for commands; run sends the file itself through it, saving first because the
+  runner reads from disk. Either one, tapped before the terminal app is set up, opens the
+  step that clears the way rather than reporting an error.
+- **Everything a program prints is shown, whole.** Standard output and standard error
+  both, unedited, before any of our own commentary, and printed even when the run failed
+  on our side, because a program that managed three lines wrote three useful lines. A
+  traceback is the part of a failed run that explains it, and an editor that replaced it
+  with an exit code would be taking away the only thing worth reading. The scrollback is
+  selectable so an error can be copied, and when output was too large to pass back whole
+  the terminal says how much is missing rather than letting a cut-off trace look complete.
+- **The prompt reads `~ $`.** The working directory is announced once when it changes and
+  then stays out of the way. `cd` is handled here, since each command is its own process
+  and nothing carries between them, and it is checked against the filesystem rather than
+  believed: walking into a directory that is not there would otherwise break every
+  command after it for a reason the terminal already knew.
 - **A setup flow for the terminal**, in the F-Droid build only. Two dialogs: the first
   gets the runner installed, permitted and willing to take orders, showing which rung of
   that ladder you are on and the two commands to paste, each with a copy button and the

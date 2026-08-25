@@ -46,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,9 +69,13 @@ import dev.hazel.code.ui.common.Motion
 import dev.hazel.code.ui.common.ShapeLoader
 import dev.hazel.code.ui.common.rememberCopyToClipboard
 import dev.hazel.code.ui.common.rememberPasteFromClipboard
+import dev.hazel.code.exec.Readiness
+import dev.hazel.code.exec.Runtime
 import dev.hazel.code.ui.exec.RunnerSetupDialog
 import dev.hazel.code.ui.exec.RuntimePickerDialog
 import dev.hazel.code.ui.exec.SetupViewModel
+import dev.hazel.code.ui.exec.TerminalSheet
+import dev.hazel.code.ui.exec.TerminalViewModel
 import dev.hazel.code.ui.preview.MarkdownView
 import dev.hazel.code.ui.theme.CodeFont
 import dev.hazel.code.ui.theme.InkRaised
@@ -79,6 +84,7 @@ import dev.hazel.code.ui.theme.Radii
 import dev.hazel.code.ui.theme.TextHigh
 import dev.hazel.code.ui.theme.TextLow
 import dev.hazel.code.ui.theme.TextMid
+import kotlinx.coroutines.launch
 import java.io.File
 
 @Composable
@@ -100,6 +106,33 @@ fun EditorScreen(
     // Shared with the rest of the app rather than owned by this screen: an install is a
     // long download that must not be abandoned because a dialog closed.
     val setup: SetupViewModel = viewModel()
+    val terminal: TerminalViewModel = viewModel()
+    val scope = rememberCoroutineScope()
+
+    /** What this file would be run with, or null when nothing here runs it. */
+    val runtime = remember(file.name) { Runtime.forFile(file.name) }
+
+    /**
+     * Opens the terminal, or the thing standing in its way.
+     *
+     * The same gate serves both buttons: there is no point opening a console onto a
+     * runner that is not answering, and no point running a file with a language that is
+     * not installed. Each obstacle leads to the dialog that clears it rather than to an
+     * error.
+     */
+    fun withRunner(needs: Runtime?, then: () -> Unit) {
+        scope.launch {
+            if (terminal.readiness() !is Readiness.Ready) {
+                setupOpen = true
+                return@launch
+            }
+            if (needs != null && !terminal.isInstalled(needs)) {
+                runtimesOpen = true
+                return@launch
+            }
+            then()
+        }
+    }
 
     LaunchedEffect(file.absolutePath) { vm.load(file) }
     LaunchedEffect(vm.message) {
@@ -171,12 +204,29 @@ fun EditorScreen(
                 showPreviewToggle = isMarkdown,
                 previewing = !editing,
                 showHistory = editing && !vm.readOnly,
+                showTerminal = terminal.supported,
+                showRun = terminal.supported && runtime != null,
+                running = terminal.running,
                 canUndo = vm.canUndo,
                 canRedo = vm.canRedo,
                 onBack = { leave() },
                 onTogglePreview = { vm.switchMode(if (editing) ViewMode.PREVIEW else ViewMode.EDIT) },
                 onUndo = { vm.undo() },
                 onRedo = { vm.redo() },
+                onTerminal = {
+                    withRunner(needs = null) {
+                        terminal.openAt(file.parent ?: file.absolutePath)
+                    }
+                },
+                onRun = {
+                    val language = runtime ?: return@EditorBar
+                    withRunner(needs = language) {
+                        // Saved first: the runner reads the file from disk and knows
+                        // nothing about a buffer that has not been written yet.
+                        if (vm.dirty) vm.save { saved -> if (saved) terminal.runFile(file, language) }
+                        else terminal.runFile(file, language)
+                    }
+                },
                 onSave = { vm.save() },
                 onMenu = { menuOpen = true },
                 menu = {
@@ -264,6 +314,8 @@ fun EditorScreen(
         }
     }
 
+    TerminalSheet(terminal)
+
     if (setupOpen) {
         RunnerSetupDialog(
             vm = setup,
@@ -342,10 +394,15 @@ private fun EditorBar(
     showHistory: Boolean,
     canUndo: Boolean,
     canRedo: Boolean,
+    showTerminal: Boolean,
+    showRun: Boolean,
+    running: Boolean,
     onBack: () -> Unit,
     onTogglePreview: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
+    onTerminal: () -> Unit,
+    onRun: () -> Unit,
     onSave: () -> Unit,
     onMenu: () -> Unit,
     menu: @Composable () -> Unit,
@@ -388,6 +445,23 @@ private fun EditorBar(
                 if (previewing) "Edit source" else "Preview",
                 tint = if (previewing) MaterialTheme.colorScheme.primary else TextHigh,
                 onClick = onTogglePreview,
+            )
+        }
+
+        // The terminal opens a console on this file's folder; run sends the file itself
+        // through it. Both are absent in a build that cannot run code, and run is absent
+        // for a language nothing here knows how to start.
+        if (showTerminal) {
+            BarIcon(Ico.Terminal, "Terminal", onClick = onTerminal)
+        }
+        if (showRun) {
+            BarIcon(
+                Ico.Play,
+                "Run",
+                enabled = !running,
+                tint = if (running) TextLow.copy(alpha = 0.45f)
+                else MaterialTheme.colorScheme.primary,
+                onClick = onRun,
             )
         }
 

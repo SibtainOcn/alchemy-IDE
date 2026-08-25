@@ -51,6 +51,32 @@ private fun filled(name: String, vararg paths: String): ImageVector =
         }
     }.build()
 
+/**
+ * For a glyph that arrives already drawn on someone else's grid.
+ *
+ * Material Symbols are laid out on 960 units with the origin at the baseline, so the
+ * whole thing needs shifting down by one viewport before it lands where a 0,0 icon does.
+ */
+private fun filledOn(
+    name: String,
+    viewport: Float,
+    translationY: Float,
+    vararg paths: String,
+): ImageVector =
+    ImageVector.Builder(
+        name = name,
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = viewport,
+        viewportHeight = viewport,
+    ).apply {
+        addGroup(name = name, translationY = translationY)
+        paths.forEach { d ->
+            addPath(pathData = PathParser().parsePathString(d).toNodes(), fill = SolidColor(Color.White))
+        }
+        clearGroup()
+    }.build()
+
 object Ico {
     val Back = stroked("back", "M14.5 5.5 L8 12 l6.5 6.5")
     val ChevronRight = stroked("chevron", "M9.5 5.5 L16 12 l-6.5 6.5")
@@ -104,6 +130,22 @@ object Ico {
     val Folder = stroked("folder", "M3.5 7c0-.8.7-1.5 1.5-1.5h3.6l2 2.2H19c.8 0 1.5.7 1.5 1.5v8.3c0 .8-.7 1.5-1.5 1.5H5c-.8 0-1.5-.7-1.5-1.5Z")
     val Font = stroked("font", "M5 19 L11 5 L13 5 L19 19", "M7.6 14.2 L16.4 14.2")
     val Numbers = stroked("numbers", "M5 6 L5 12", "M4 6.8 L5.6 5.5", "M3.8 16.2c0-1 .8-1.6 1.7-1.6.8 0 1.5.6 1.5 1.4 0 1.6-3.2 1.9-3.2 3.7h3.4", "M11 8 L20 8", "M11 16 L20 16")
+    /**
+     * Run. Filled rather than stroked, like `More`: it is the one button on the bar that
+     * makes something happen to the world rather than to the view.
+     */
+    val Play = filled("play", "M8 5.1 L19.4 12 L8 18.9 Z")
+
+    /** A terminal window with a prompt in it. Drawn on Material's 960 grid, not ours. */
+    val Terminal = filledOn(
+        "terminal",
+        960f,
+        960f,
+        "M160,-160q-33,0 -56.5,-23.5T80,-240v-480q0,-33 23.5,-56.5T160,-800h640q33,0 " +
+            "56.5,23.5T880,-720v480q0,33 -23.5,56.5T800,-160H160Zm0,-80h640v-400H160v400Zm140,-40l-56,-56 " +
+            "103,-104 -104,-104 57,-56 160,160 -160,160Zm180,0v-80h240v80H480Z",
+    )
+
     val Wrench = stroked("wrench", "M15.6 4.6a5 5 0 0 0 -6 6.4L4.6 16a2 2 0 0 0 2.8 2.8l5-5a5 5 0 0 0 6.4-6l-3 3-2.2-2.2Z")
 }
 

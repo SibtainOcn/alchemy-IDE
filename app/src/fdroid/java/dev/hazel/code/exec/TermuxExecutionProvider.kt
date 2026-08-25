@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Bundle
 import androidx.core.content.ContextCompat
 import androidx.core.content.pm.PackageInfoCompat
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +69,8 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
 
     override fun launchIntent(): Intent? =
         context.packageManager.getLaunchIntentForPackage(Termux.PACKAGE)
+
+    override val homeDirectory: String get() = Termux.HOME
 
     override suspend fun isInstalled(runtime: Runtime): Boolean {
         val result = run(
@@ -201,26 +204,49 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
         val stderr = bundle.getString(Termux.RESULT_STDERR).orEmpty()
         val message = bundle.getString(Termux.RESULT_ERRMSG)
         val termuxError = bundle.getInt(Termux.RESULT_ERR, 0)
+        val stdoutLength = lengthOf(bundle, Termux.RESULT_STDOUT_LENGTH, stdout.length)
+        val stderrLength = lengthOf(bundle, Termux.RESULT_STDERR_LENGTH, stderr.length)
 
         return when {
             Termux.rejectedForExternalApps(message) -> RunResult(
                 stdout = stdout,
                 stderr = stderr,
                 failure = RunFailure.ExternalAppsDisabled,
+                stdoutFullLength = stdoutLength,
+                stderrFullLength = stderrLength,
             )
 
+            // Termux could not run the thing. Whatever it managed to say is kept as well
+            // as its own explanation, because either one might be the answer.
             termuxError != 0 -> RunResult(
                 stdout = stdout,
                 stderr = listOf(stderr, message.orEmpty()).filter { it.isNotBlank() }.joinToString("\n"),
                 failure = RunFailure.Failed,
+                stdoutFullLength = stdoutLength,
+                stderrFullLength = stderrLength,
             )
 
             else -> RunResult(
                 stdout = stdout,
                 stderr = stderr,
                 exitCode = bundle.getInt(Termux.RESULT_EXIT_CODE, 0),
+                stdoutFullLength = stdoutLength,
+                stderrFullLength = stderrLength,
             )
         }
+    }
+
+    /**
+     * Reads one of the original-length fields.
+     *
+     * Defensive about the type: this is another project's bundle, and a number that
+     * arrives as text should not cost the truncation warning.
+     */
+    private fun lengthOf(bundle: Bundle, key: String, fallback: Int): Int {
+        if (!bundle.containsKey(key)) return fallback
+        val asInt = bundle.getInt(key, Int.MIN_VALUE)
+        if (asInt != Int.MIN_VALUE) return asInt
+        return bundle.getString(key)?.trim()?.toIntOrNull() ?: fallback
     }
 
     private fun unregister(receiver: BroadcastReceiver, onDone: () -> Unit) {
