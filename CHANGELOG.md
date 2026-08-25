@@ -85,6 +85,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   Gradle started.
 
 ### Changed
+- **Undo stores edits, not copies of the file.** A snapshot history cost the size of the
+  document per step, which made depth a function of file size: capping the memory left a
+  2 MB file about seven steps. A step now costs the size of the change - a keystroke is a
+  keystroke whether the file around it is 4 KB or 2 MB - so the depth is a flat 500 steps
+  on every file, and a thousand keystrokes in a 1 MB file hold under 2 KB of history
+  rather than the hundreds of megabytes the same session cost before. This is how Vim,
+  Emacs, VS Code and Compose's own text field all store history.
+- **A line break is its own undo step.** Nothing merges into it and it merges into
+  nothing, so undo hands back the words on a line before it hands back the line.
+- Undo restores the caret and selection from either side of the edit, rather than leaving
+  it wherever the change ended.
+- A history that no longer matches the buffer is discarded rather than applied. A snapshot
+  could not be wrong about the text it replaced; an edit can be, and applying one to a
+  buffer it does not fit would corrupt the file.
+- The history budget is a flat figure rather than a share of the device heap. It was read
+  from the heap when a step cost as much as the whole file; it no longer does.
 - **The key bar is one row and every key can be dragged**, Ctrl and Tab included. Pinning
   four keys cost their width on every screen and stopped exactly the keys people most want
   to move from being moved.
