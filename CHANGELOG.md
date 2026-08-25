@@ -40,6 +40,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   tests. Packaging (debug + release through R8) runs on `main`.
 
 ### Fixed
+- **The launcher icon was a blob rather than a bolt.** The mark is an open curve meant to
+  be stroked; it was being filled as well, which closes it through the shortest line
+  between its ends and fattened the shape until it read as a smudge at icon size. It is
+  now stroked only, at the size the other Hazel app uses, which also brings it inside the
+  safe circle no launcher mask can clip.
 - **A key could only be dragged one place per long-press.** Every crossing was written
   straight back to the saved order, which rebuilt the row from a new list mid-gesture,
   restarted the pointer input under the finger and ended the drag. A drag now runs against
@@ -85,6 +90,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   Gradle started.
 
 ### Changed
+- Release titles carry the app name - `Hazel-IDE 1.2.0` rather than `1.2.0`. A releases
+  list, a notification and a shared link all show the title on its own.
+- Release notes reference pull requests by number rather than by full URL. The link is the
+  same; the line is readable at the width a phone shows it.
 - **The key bar is one row and every key can be dragged**, Ctrl and Tab included. Pinning
   four keys cost their width on every screen and stopped exactly the keys people most want
   to move from being moved.

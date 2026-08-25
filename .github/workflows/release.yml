@@ -140,6 +140,15 @@ jobs:
           # line: both are noise on a solo project.
           body = re.split(r"\n#+\s*New Contributors", body)[0]
           body = re.sub(r"\n\*\*Full Changelog\*\*.*", "", body)
+
+          # Each entry arrives as "... in https://github.com/owner/repo/pull/12". The bare
+          # number links to the same place and reads as a reference rather than as a line
+          # of address bar, so the notes stay scannable at the width a phone shows them.
+          body = re.sub(
+              r"in https://github\.com/[^/\s]+/[^/\s]+/pull/(\d+)",
+              r"in #\1",
+              body,
+          )
           body = body.strip()
 
           changelog_url = f"https://github.com/{repo}/blob/{tag}/CHANGELOG.md"
@@ -173,9 +182,10 @@ jobs:
             PRERELEASE_FLAG="--prerelease"
           fi
 
-          # Title is the bare version, matching the tag without its v.
+          # Title carries the app name: a releases list, a notification and a shared link
+          # all show the title alone, and "1.2.0" on its own says nothing about what it is.
           gh release create "$TAG" \
-            --title "${{ steps.version.outputs.version }}" \
+            --title "Hazel-IDE ${{ steps.version.outputs.version }}" \
             --notes-file release-notes.md \
             $PRERELEASE_FLAG \
             app/build/outputs/packaged/*.apk \
