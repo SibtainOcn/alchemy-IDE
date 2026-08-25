@@ -160,8 +160,13 @@ fun EditorScreen(
                 canSave = vm.dirty && !vm.readOnly,
                 showPreviewToggle = isMarkdown,
                 previewing = !editing,
+                showHistory = editing && !vm.readOnly,
+                canUndo = vm.canUndo,
+                canRedo = vm.canRedo,
                 onBack = { leave() },
                 onTogglePreview = { vm.switchMode(if (editing) ViewMode.PREVIEW else ViewMode.EDIT) },
+                onUndo = { vm.undo() },
+                onRedo = { vm.redo() },
                 onSave = { vm.save() },
                 onMenu = { menuOpen = true },
                 menu = {
@@ -307,8 +312,13 @@ private fun EditorBar(
     canSave: Boolean,
     showPreviewToggle: Boolean,
     previewing: Boolean,
+    showHistory: Boolean,
+    canUndo: Boolean,
+    canRedo: Boolean,
     onBack: () -> Unit,
     onTogglePreview: () -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
     onSave: () -> Unit,
     onMenu: () -> Unit,
     menu: @Composable () -> Unit,
@@ -351,6 +361,27 @@ private fun EditorBar(
                 if (previewing) "Edit source" else "Preview",
                 tint = if (previewing) MaterialTheme.colorScheme.primary else TextHigh,
                 onClick = onTogglePreview,
+            )
+        }
+
+        // Undo and redo are in the menu as well, but taking back a typo is the most
+        // repeated action in an editor and it should not cost two taps and a menu. They
+        // appear only while there is text being edited, so a preview or a read-only file
+        // does not pay for them in bar width.
+        if (showHistory) {
+            BarIcon(
+                Ico.Undo,
+                "Undo",
+                enabled = canUndo,
+                tint = if (canUndo) TextHigh else TextLow.copy(alpha = 0.45f),
+                onClick = onUndo,
+            )
+            BarIcon(
+                Ico.Redo,
+                "Redo",
+                enabled = canRedo,
+                tint = if (canRedo) TextHigh else TextLow.copy(alpha = 0.45f),
+                onClick = onRedo,
             )
         }
 
