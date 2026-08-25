@@ -96,4 +96,32 @@ object Termux {
      * line above.
      */
     const val GRANT_STORAGE = "termux-setup-storage"
+
+    /**
+     * The two commands, in the order they have to happen, with the reason for each.
+     *
+     * Both are mandatory and neither can be run for the user. The first is the permission
+     * that lets this app ask Termux for anything at all, so until it is set there is no
+     * channel to send the second one down.
+     */
+    val SETUP_GUIDE = SetupGuide(
+        runnerName = "Termux",
+        downloadUrl = RELEASES_URL,
+        downloadNote = "Install from GitHub, not Google Play. The Play Store copy is " +
+            "frozen years behind and cannot take commands from other apps.",
+        steps = listOf(
+            SetupStep(
+                title = "Let Termux take commands",
+                why = "Termux ignores other apps until this is switched on. Safe to run " +
+                    "twice: it will not add the line again.",
+                command = ENABLE_EXTERNAL_APPS,
+            ),
+            SetupStep(
+                title = "Give Termux access to your files",
+                why = "Your code lives in shared storage and Termux starts out able to " +
+                    "see only its own. Android will ask you to allow it.",
+                command = GRANT_STORAGE,
+            ),
+        ),
+    )
 }

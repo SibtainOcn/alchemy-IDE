@@ -33,15 +33,20 @@ enum class Runtime(
     /** Lower case, no leading dot. */
     val extensions: Set<String>,
 
-    /** Roughly what installing this costs, to show before the download starts. */
-    val approximateDownload: String,
+    /**
+     * Roughly what installing this costs, in megabytes.
+     *
+     * A number rather than a label because the installer sorts by it: smallest first, so
+     * something works within a minute instead of after the longest download in the set.
+     */
+    val approximateMb: Int,
 ) {
     PYTHON(
         label = "Python",
         packages = listOf("python"),
         probe = "python",
         extensions = setOf("py"),
-        approximateDownload = "~50 MB",
+        approximateMb = 50,
     ),
 
     C(
@@ -49,7 +54,7 @@ enum class Runtime(
         packages = listOf("clang", "binutils", "make"),
         probe = "clang",
         extensions = setOf("c", "h"),
-        approximateDownload = "~120 MB",
+        approximateMb = 120,
     ),
 
     GO(
@@ -57,11 +62,17 @@ enum class Runtime(
         packages = listOf("golang"),
         probe = "go",
         extensions = setOf("go"),
-        approximateDownload = "~250 MB",
+        approximateMb = 250,
     );
+
+    /** What to show beside the name before anyone commits to the download. */
+    val downloadSize: String get() = "~$approximateMb MB"
 
     /** The one line that installs this runtime, for the user to copy or for us to send. */
     val installCommand: String get() = "pkg install -y ${packages.joinToString(" ")}"
+
+    /** Asks the shell whether this runtime is on PATH, quietly. */
+    val probeCommand: String get() = "command -v $probe" 
 
     /**
      * The shell line that runs [path].

@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **A setup flow for the terminal**, in the F-Droid build only. Two dialogs: the first
+  gets the runner installed, permitted and willing to take orders, showing which rung of
+  that ladder you are on and the two commands to paste, each with a copy button and the
+  reason it exists; the second offers Python, C and Go to install, none preselected, with
+  a size beside each, Skip, and the command to run by hand instead. Reachable from the
+  editor menu, and it will open by itself when a run needs something that is not there.
+- **A language installer that thinks before it downloads.** Anything already present is
+  skipped rather than fetched again, the rest go smallest first so something works within
+  a minute, packages wanted by two languages are asked for once, and one language failing
+  leaves the others to finish. A package manager that reports success is not believed
+  until the program it installed actually answers.
 - **Two builds from one codebase.** The `fdroid` flavour, which is what GitHub releases
   ship and keeps the existing `dev.hazel.code` id, is the one that can hand a file to a
   separately installed Termux. The `playstore` flavour carries no execution code and no

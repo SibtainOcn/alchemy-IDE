@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.hazel.code.data.Language
 import dev.hazel.code.ui.common.ConfirmDialog
 import dev.hazel.code.ui.common.EmptyState
@@ -67,6 +68,9 @@ import dev.hazel.code.ui.common.Motion
 import dev.hazel.code.ui.common.ShapeLoader
 import dev.hazel.code.ui.common.rememberCopyToClipboard
 import dev.hazel.code.ui.common.rememberPasteFromClipboard
+import dev.hazel.code.ui.exec.RunnerSetupDialog
+import dev.hazel.code.ui.exec.RuntimePickerDialog
+import dev.hazel.code.ui.exec.SetupViewModel
 import dev.hazel.code.ui.preview.MarkdownView
 import dev.hazel.code.ui.theme.CodeFont
 import dev.hazel.code.ui.theme.InkRaised
@@ -90,6 +94,12 @@ fun EditorScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
     var infoOpen by remember { mutableStateOf(false) }
+    var setupOpen by remember { mutableStateOf(false) }
+    var runtimesOpen by remember { mutableStateOf(false) }
+
+    // Shared with the rest of the app rather than owned by this screen: an install is a
+    // long download that must not be abandoned because a dialog closed.
+    val setup: SetupViewModel = viewModel()
 
     LaunchedEffect(file.absolutePath) { vm.load(file) }
     LaunchedEffect(vm.message) {
@@ -179,6 +189,11 @@ fun EditorScreen(
                             menuOpen = false
                         },
                         onInfo = { infoOpen = true; menuOpen = false },
+                        onSetup = if (setup.supported) {
+                            { setupOpen = true; menuOpen = false }
+                        } else {
+                            null
+                        },
                     )
                 },
             )
@@ -247,6 +262,18 @@ fun EditorScreen(
             confirmExit = false
             onClose()
         }
+    }
+
+    if (setupOpen) {
+        RunnerSetupDialog(
+            vm = setup,
+            onDismiss = { setupOpen = false },
+            onContinue = { setupOpen = false; runtimesOpen = true },
+        )
+    }
+
+    if (runtimesOpen) {
+        RuntimePickerDialog(vm = setup, onDismiss = { runtimesOpen = false })
     }
 
     if (infoOpen) {
@@ -419,6 +446,8 @@ private fun EditorMenu(
     onDismiss: () -> Unit,
     onCopyAll: () -> Unit,
     onInfo: () -> Unit,
+    /** Null in a build that cannot run code, which is how the row stays out of it. */
+    onSetup: (() -> Unit)?,
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -460,6 +489,7 @@ private fun EditorMenu(
         HairlineDivider(Modifier.padding(vertical = 4.dp))
         MenuRow(Ico.Copy, "Copy all", onClick = onCopyAll)
         MenuRow(Ico.Info, "File info", onClick = onInfo)
+        onSetup?.let { MenuRow(Ico.Wrench, "Set up terminal", onClick = it) }
     }
 }
 

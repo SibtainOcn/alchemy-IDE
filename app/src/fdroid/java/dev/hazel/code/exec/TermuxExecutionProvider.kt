@@ -62,6 +62,67 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
             ?: RunResult(failure = RunFailure.TimedOut)
     }
 
+    override val setupGuide: SetupGuide get() = Termux.SETUP_GUIDE
+
+    override val requiredPermission: String get() = Termux.PERMISSION_RUN_COMMAND
+
+    override fun launchIntent(): Intent? =
+        context.packageManager.getLaunchIntentForPackage(Termux.PACKAGE)
+
+    override suspend fun isInstalled(runtime: Runtime): Boolean {
+        val result = run(
+            RunRequest(
+                command = runtime.probeCommand,
+                workingDir = Termux.HOME,
+                timeoutMs = PROBE_TIMEOUT_MS,
+            )
+        )
+        // `command -v` says nothing and exits non-zero when the program is not there.
+        return result.exitCode == 0 && result.stdout.isNotBlank()
+    }
+
+    override suspend fun install(
+        runtimes: List<Runtime>,
+        onState: (Runtime, InstallState) -> Unit,
+    ) {
+        runtimes.forEach { runtime ->
+            onState(runtime, InstallState.Installing)
+
+            val result = run(
+                RunRequest(
+                    command = runtime.installCommand,
+                    workingDir = Termux.HOME,
+                    timeoutMs = INSTALL_TIMEOUT_MS,
+                )
+            )
+
+            val state = when {
+                result.failure == RunFailure.TimedOut ->
+                    InstallState.Failed("Timed out. A slow connection can outlast the wait.")
+
+                result.failure != null ->
+                    InstallState.Failed(lastMeaningfulLine(result.stderr, "Could not reach Termux"))
+
+                result.exitCode != 0 -> InstallState.Failed(
+                    lastMeaningfulLine(
+                        result.stderr.ifBlank { result.stdout },
+                        "The package manager exited with ${result.exitCode}",
+                    )
+                )
+
+                // Installed as far as the package manager is concerned. Whether the
+                // program is actually on PATH is a separate question, and the answer is
+                // not always yes: a broken mirror or a half-finished earlier install both
+                // end here.
+                !isInstalled(runtime) -> InstallState.InstalledButMissing
+
+                else -> InstallState.Installed
+            }
+
+            onState(runtime, state)
+        }
+    }
+
     private suspend fun awaitResult(action: String, request: RunRequest): RunResult =
         suspendCancellableCoroutine { continuation ->
             var registered = true
@@ -176,6 +237,18 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
             flags = flags or PendingIntent.FLAG_MUTABLE
         }
         return flags
+    }
+
+    private companion object {
+        /** A probe is one process and no network; anything slower has gone wrong. */
+        const val PROBE_TIMEOUT_MS = 15_000L
+
+        /**
+         * Long, because this is a download over whatever connection the phone has, and
+         * Go is a quarter of a gigabyte. Better to wait than to abandon an install
+         * half-written and leave the package manager to be repaired by hand.
+         */
+        const val INSTALL_TIMEOUT_MS = 15 * 60 * 1000L
     }
 
     private fun packageInfo(): PackageInfo? = runCatching {

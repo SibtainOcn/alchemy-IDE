@@ -1,6 +1,7 @@
 package dev.hazel.code.exec
 
 import android.content.Context
+import android.content.Intent
 
 /**
  * The Play Store build's answer to "where does code run": nowhere.
@@ -21,4 +22,16 @@ object NoExecutionProvider : ExecutionProvider {
 
     override suspend fun run(request: RunRequest): RunResult =
         RunResult(failure = RunFailure.Unsupported)
+
+    override val setupGuide: SetupGuide? get() = null
+
+    override val requiredPermission: String? get() = null
+
+    override fun launchIntent(): Intent? = null
+
+    override suspend fun isInstalled(runtime: Runtime): Boolean = false
+
+    override suspend fun install(runtimes: List<Runtime>, onState: (Runtime, InstallState) -> Unit) {
+        runtimes.forEach { onState(it, InstallState.Failed("This build cannot install runtimes")) }
+    }
 }

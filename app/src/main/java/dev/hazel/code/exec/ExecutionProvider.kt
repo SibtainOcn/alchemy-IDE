@@ -1,5 +1,7 @@
 package dev.hazel.code.exec
 
+import android.content.Intent
+
 /**
  * Where code goes to be run.
  *
@@ -28,6 +30,36 @@ interface ExecutionProvider {
 
     /** Runs one command and returns everything it wrote. */
     suspend fun run(request: RunRequest): RunResult
+
+    /**
+     * What to tell the user to do by hand, or null when there is nothing to set up.
+     *
+     * The setup screen is shared code and never names the runner. It asks for this and
+     * draws whatever it is given.
+     */
+    val setupGuide: SetupGuide?
+
+    /**
+     * The permission the user has to grant before anything can be asked of the runner, or
+     * null when the runner needs none.
+     */
+    val requiredPermission: String?
+
+    /** An intent that opens the runner app, or null when there is nothing to open. */
+    fun launchIntent(): Intent?
+
+    /** Whether [runtime] is installed and on PATH. False when that cannot be established. */
+    suspend fun isInstalled(runtime: Runtime): Boolean
+
+    /**
+     * Installs [runtimes] in the order given, reporting each one as it goes.
+     *
+     * One at a time rather than all at once: a package manager holds a lock, so a second
+     * install started alongside the first fails on the lock rather than on anything real.
+     * A failure does not stop the ones after it, because one language failing is no
+     * reason to deny somebody the other two.
+     */
+    suspend fun install(runtimes: List<Runtime>, onState: (Runtime, InstallState) -> Unit)
 }
 
 /** One command to run, and where to run it. */
