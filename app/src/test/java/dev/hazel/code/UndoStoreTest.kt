@@ -21,7 +21,7 @@ class UndoStoreTest {
     @Test
     fun `a file's history survives leaving it and coming back`() {
         val store = UndoStore()
-        store.of("/a.py", "one").recordDiscrete(v("one"))
+        store.of("/a.py", "one").recordDiscrete(v("one"), v("one changed"))
 
         // Off to another file and back again.
         store.of("/b.py", "other")
@@ -34,7 +34,7 @@ class UndoStoreTest {
     @Test
     fun `a history is dropped when the file has changed underneath it`() {
         val store = UndoStore()
-        store.of("/a.py", "one").recordDiscrete(v("one"))
+        store.of("/a.py", "one").recordDiscrete(v("one"), v("one changed"))
 
         // Something else wrote the file between visits - another app, a checkout, or this
         // app's own discarded edits. Undoing into the old text would restore a version
@@ -48,7 +48,7 @@ class UndoStoreTest {
     fun `an edited buffer is remembered, so saving and reopening keeps the history`() {
         val store = UndoStore()
         val history = store.of("/a.py", "one")
-        history.recordDiscrete(v("one"))
+        history.recordDiscrete(v("one"), v("one and two"))
         store.noteText("/a.py", "one and two")
 
         // The file was saved, so what is on disk is what the buffer held.
@@ -62,9 +62,9 @@ class UndoStoreTest {
         // the store cannot see a history grow after it has handed it out.
         val store = UndoStore(budgetChars = 600)
         val text = "x".repeat(400)
-        store.of("/a.py", text).recordDiscrete(v(text))
+        store.of("/a.py", text).recordDiscrete(v(""), v(text))
         store.noteText("/a.py", text)
-        store.of("/b.py", text).recordDiscrete(v(text))
+        store.of("/b.py", text).recordDiscrete(v(""), v(text))
         store.noteText("/b.py", text)
 
         assertEquals("The older file should have been dropped whole", 1, store.fileCount)
@@ -77,9 +77,9 @@ class UndoStoreTest {
     fun `the file being edited is never the one evicted`() {
         val store = UndoStore(budgetChars = 600)
         val text = "x".repeat(400)
-        store.of("/a.py", text).recordDiscrete(v(text))
+        store.of("/a.py", text).recordDiscrete(v(""), v(text))
         store.noteText("/a.py", text)
-        store.of("/b.py", text).recordDiscrete(v(text))
+        store.of("/b.py", text).recordDiscrete(v(""), v(text))
 
         // Editing /b.py further must not cost /b.py its own history.
         store.noteText("/b.py", text)
@@ -113,7 +113,7 @@ class UndoStoreTest {
     @Test
     fun `a forgotten file starts over, and clearing forgets everything`() {
         val store = UndoStore()
-        store.of("/a.py", "one").recordDiscrete(v("one"))
+        store.of("/a.py", "one").recordDiscrete(v("one"), v("one changed"))
         store.forget("/a.py")
         assertFalse(store.of("/a.py", "one").canUndo)
 

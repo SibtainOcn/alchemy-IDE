@@ -15,12 +15,18 @@ package dev.hazel.code.ui.editor
  * recently edited file loses its history whole: dropping one closed file's history
  * entirely is a better trade than shortening the history of the file in front of you.
  *
+ * The figure is a flat one rather than a share of the device heap. It was read from the
+ * heap when a step cost as much as the whole file; a step now costs as much as the edit
+ * that made it, so a dozen files' worth of history is a couple of megabytes on any phone
+ * that can run the app at all.
+ *
  * The total is checked whenever the store is told about a buffer, which the editor does
  * on every edit. It cannot be checked as a history grows: the store hands the history out
  * and does not see what is recorded into it.
  */
 class UndoStore(
-    private val budgetChars: Int = UndoHistory.budgetCharsFor(Runtime.getRuntime().maxMemory()),
+    /** Characters of edit text held across every file. Roughly 2 MB of UTF-16. */
+    private val budgetChars: Int = 1_000_000,
     private val maxFiles: Int = 12,
 ) {
     private class Entry(val history: UndoHistory, var text: String)
