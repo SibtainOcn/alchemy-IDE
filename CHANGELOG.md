@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **Undo and redo in the editor bar**, beside save. Taking back a typo is the most
+  repeated action in an editor and it cost two taps and a menu. They show only while text
+  is being edited, so a preview or a read-only file does not spend bar width on them, and
+  they stay in the menu as well.
 - **Release signing and packaging.** `keystore.properties` (local) or environment
   variables (CI) drive a real `signingConfig`, so the release variant installs from
   Android Studio's Run button and from `./gradlew assembleRelease`.
