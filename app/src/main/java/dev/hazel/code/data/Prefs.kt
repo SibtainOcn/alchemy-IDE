@@ -49,6 +49,16 @@ class Prefs(context: Context) {
         set(v) = sp.edit { putBoolean("line_numbers", v) }
 
     /**
+     * Whether the runner setup has been offered once already.
+     *
+     * Offered, not completed: someone who declined it should not be asked again every
+     * time they open a file, and someone who finished it has nothing left to be asked.
+     */
+    var setupOffered: Boolean
+        get() = sp.getBoolean("setup_offered", false)
+        set(v) = sp.edit { putBoolean("setup_offered", v) }
+
+    /**
      * The user's dragged key-bar order, as stable key ids.
      *
      * Stored per language, because the order that suits Python is not the order that

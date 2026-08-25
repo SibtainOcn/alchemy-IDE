@@ -49,6 +49,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -74,6 +76,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.hazel.code.data.Entry
 import dev.hazel.code.data.FileStore
 import dev.hazel.code.data.SortBy
@@ -88,6 +91,9 @@ import dev.hazel.code.ui.common.NameDialog
 import dev.hazel.code.ui.common.ShapeLoader
 import dev.hazel.code.ui.common.rememberCopyToClipboard
 import dev.hazel.code.ui.common.SheetAction
+import dev.hazel.code.ui.exec.RunnerSetupDialog
+import dev.hazel.code.ui.exec.RuntimePickerDialog
+import dev.hazel.code.ui.exec.SetupViewModel
 import dev.hazel.code.ui.theme.Hairline
 import dev.hazel.code.ui.theme.InkRaised
 import dev.hazel.code.ui.theme.Radii
@@ -113,6 +119,12 @@ fun ExplorerScreen(
     var renaming by remember { mutableStateOf<Entry?>(null) }
     var deleting by remember { mutableStateOf<Entry?>(null) }
     var sortSheet by remember { mutableStateOf(false) }
+    var setupOpen by remember { mutableStateOf(false) }
+    var runtimesOpen by remember { mutableStateOf(false) }
+
+    // Setting the terminal up has nothing to do with any one file, so it is reachable
+    // from here rather than only from inside the editor.
+    val setup: SetupViewModel = viewModel()
 
     // One scroll position per folder, so backing out of a directory lands you where you
     // left rather than at the top - the thing every file manager gets judged on. Bounded
@@ -124,6 +136,13 @@ fun ExplorerScreen(
                 eldest: MutableMap.MutableEntry<String, androidx.compose.foundation.lazy.LazyListState>,
             ): Boolean = size > 64
         }
+    }
+
+    if (setupOpen) {
+        RunnerSetupDialog(vm = setup, onDismiss = { setupOpen = false })
+    }
+    if (runtimesOpen) {
+        RuntimePickerDialog(vm = setup, onDismiss = { runtimesOpen = false })
     }
 
     // Swallowing back at the root would trap the user in the app.
@@ -163,6 +182,9 @@ fun ExplorerScreen(
                 onQuery = vm::setQuery,
                 onSort = { sortSheet = true },
                 onHome = { vm.jumpTo(FileStore.storageRoot) },
+                onCopyPath = { copyToClipboard(state.dir.absolutePath) },
+                onSetup = if (setup.supported) ({ setupOpen = true }) else null,
+                onRuntimes = if (setup.supported) ({ runtimesOpen = true }) else null,
             )
 
             Crumbs(dir = state.dir, onJump = vm::jumpTo)
@@ -324,7 +346,13 @@ private fun ExplorerBar(
     onQuery: (String) -> Unit,
     onSort: () -> Unit,
     onHome: () -> Unit,
+    onCopyPath: () -> Unit,
+    /** Both null in a build that cannot run code. */
+    onSetup: (() -> Unit)?,
+    onRuntimes: (() -> Unit)?,
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
+
     Column(Modifier.windowInsetsPadding(WindowInsets.statusBars)) {
         Row(
             Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 4.dp),
@@ -381,9 +409,41 @@ private fun ExplorerBar(
                 BarButton(Ico.Search, "Search") { onSearchToggle(true) }
                 BarButton(Ico.Sort, "Sort", onClick = onSort)
                 BarButton(Ico.Home, "Storage root", onClick = onHome)
+
+                Box {
+                    BarButton(Ico.More, "More") { menuOpen = true }
+                    DropdownMenu(
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false },
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(Radii.md),
+                        modifier = Modifier.width(240.dp),
+                    ) {
+                        BarMenuRow(Ico.Copy, "Copy path") { menuOpen = false; onCopyPath() }
+                        onSetup?.let {
+                            BarMenuRow(Ico.Wrench, "Set up terminal") { menuOpen = false; it() }
+                        }
+                        onRuntimes?.let {
+                            BarMenuRow(Ico.Terminal, "Install languages") { menuOpen = false; it() }
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+@Composable
+private fun BarMenuRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    DropdownMenuItem(
+        onClick = onClick,
+        leadingIcon = { Icon(icon, null, Modifier.size(18.dp), tint = TextMid) },
+        text = { Text(label, style = MaterialTheme.typography.bodyMedium, color = TextHigh) },
+    )
 }
 
 /** Breadcrumb strip — the path in the reference, but each segment is a jump target. */

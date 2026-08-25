@@ -51,6 +51,32 @@ private fun filled(name: String, vararg paths: String): ImageVector =
         }
     }.build()
 
+/**
+ * For a glyph that arrives already drawn on someone else's grid.
+ *
+ * Material Symbols are laid out on 960 units with the origin at the baseline, so the
+ * whole thing needs shifting down by one viewport before it lands where a 0,0 icon does.
+ */
+private fun filledOn(
+    name: String,
+    viewport: Float,
+    translationY: Float,
+    vararg paths: String,
+): ImageVector =
+    ImageVector.Builder(
+        name = name,
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = viewport,
+        viewportHeight = viewport,
+    ).apply {
+        addGroup(name = name, translationY = translationY)
+        paths.forEach { d ->
+            addPath(pathData = PathParser().parsePathString(d).toNodes(), fill = SolidColor(Color.White))
+        }
+        clearGroup()
+    }.build()
+
 object Ico {
     val Back = stroked("back", "M14.5 5.5 L8 12 l6.5 6.5")
     val ChevronRight = stroked("chevron", "M9.5 5.5 L16 12 l-6.5 6.5")
@@ -69,8 +95,15 @@ object Ico {
     val Sort = stroked("sort", "M4 6.5 L15 6.5", "M4 12 L12 12", "M4 17.5 L9 17.5", "M17.5 8 L17.5 18", "M14.5 15 L17.5 18 L20.5 15")
     val Home = stroked("home", "M4 10.5 L12 4 l8 6.5", "M6.2 12 L6.2 19.5 L17.8 19.5 L17.8 12")
     val Save = stroked("save", "M5 5.8C5 5.4 5.4 5 5.8 5H16l3 3v10.2c0 .4-.4.8-.8.8H5.8c-.4 0-.8-.4-.8-.8Z", "M8 5 L8 10 L15 10 L15 5", "M8 19 L8 14 L16 14 L16 19")
-    val Undo = stroked("undo", "M8.5 8 L4.5 12 L8.5 16", "M4.5 12 H14a5.5 5.5 0 0 1 0 11h-2.5")
-    val Redo = stroked("redo", "M15.5 8 L19.5 12 L15.5 16", "M19.5 12 H10a5.5 5.5 0 0 0 0 11h2.5")
+    /**
+     * Undo and redo, drawn to sit level with the rest of the bar.
+     *
+     * The arc used to swing down to y=23 on a 24 grid, which put the ink of the glyph a
+     * couple of units below everything beside it: correct as geometry, visibly dropped as
+     * a row of icons. These span 6 to 19, so their optical centre is the centre.
+     */
+    val Undo = stroked("undo", "M9 6 L5 10 L9 14", "M5 10 H14a4.5 4.5 0 0 1 0 9h-2.5")
+    val Redo = stroked("redo", "M15 6 L19 10 L15 14", "M19 10 H10a4.5 4.5 0 0 0 0 9h2.5")
     val Wrap = stroked("wrap", "M4 6.5 L20 6.5", "M4 12 H16a3 3 0 0 1 0 6h-3", "M15 15 L12.5 18 L15 21", "M4 17.5 L9 17.5")
     val Indent = stroked("indent", "M4 6 L20 6", "M10 10.5 L20 10.5", "M10 15 L20 15", "M4 19.5 L20 19.5", "M4 10.5 L6.5 12.75 L4 15")
     val Dedent = stroked("dedent", "M4 6 L20 6", "M10 10.5 L20 10.5", "M10 15 L20 15", "M4 19.5 L20 19.5", "M6.5 10.5 L4 12.75 L6.5 15")
@@ -104,6 +137,22 @@ object Ico {
     val Folder = stroked("folder", "M3.5 7c0-.8.7-1.5 1.5-1.5h3.6l2 2.2H19c.8 0 1.5.7 1.5 1.5v8.3c0 .8-.7 1.5-1.5 1.5H5c-.8 0-1.5-.7-1.5-1.5Z")
     val Font = stroked("font", "M5 19 L11 5 L13 5 L19 19", "M7.6 14.2 L16.4 14.2")
     val Numbers = stroked("numbers", "M5 6 L5 12", "M4 6.8 L5.6 5.5", "M3.8 16.2c0-1 .8-1.6 1.7-1.6.8 0 1.5.6 1.5 1.4 0 1.6-3.2 1.9-3.2 3.7h3.4", "M11 8 L20 8", "M11 16 L20 16")
+    /**
+     * Run. Filled rather than stroked, like `More`: it is the one button on the bar that
+     * makes something happen to the world rather than to the view.
+     */
+    val Play = filled("play", "M8 5.1 L19.4 12 L8 18.9 Z")
+
+    /** A terminal window with a prompt in it. Drawn on Material's 960 grid, not ours. */
+    val Terminal = filledOn(
+        "terminal",
+        960f,
+        960f,
+        "M160,-160q-33,0 -56.5,-23.5T80,-240v-480q0,-33 23.5,-56.5T160,-800h640q33,0 " +
+            "56.5,23.5T880,-720v480q0,33 -23.5,56.5T800,-160H160Zm0,-80h640v-400H160v400Zm140,-40l-56,-56 " +
+            "103,-104 -104,-104 57,-56 160,160 -160,160Zm180,0v-80h240v80H480Z",
+    )
+
     val Wrench = stroked("wrench", "M15.6 4.6a5 5 0 0 0 -6 6.4L4.6 16a2 2 0 0 0 2.8 2.8l5-5a5 5 0 0 0 6.4-6l-3 3-2.2-2.2Z")
 }
 

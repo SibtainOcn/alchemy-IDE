@@ -46,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +58,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.hazel.code.data.Language
 import dev.hazel.code.ui.common.ConfirmDialog
 import dev.hazel.code.ui.common.EmptyState
@@ -67,6 +69,13 @@ import dev.hazel.code.ui.common.Motion
 import dev.hazel.code.ui.common.ShapeLoader
 import dev.hazel.code.ui.common.rememberCopyToClipboard
 import dev.hazel.code.ui.common.rememberPasteFromClipboard
+import dev.hazel.code.exec.Readiness
+import dev.hazel.code.exec.Runtime
+import dev.hazel.code.ui.exec.RunnerSetupDialog
+import dev.hazel.code.ui.exec.RuntimePickerDialog
+import dev.hazel.code.ui.exec.SetupViewModel
+import dev.hazel.code.ui.exec.TerminalSheet
+import dev.hazel.code.ui.exec.TerminalViewModel
 import dev.hazel.code.ui.preview.MarkdownView
 import dev.hazel.code.ui.theme.CodeFont
 import dev.hazel.code.ui.theme.InkRaised
@@ -75,7 +84,17 @@ import dev.hazel.code.ui.theme.Radii
 import dev.hazel.code.ui.theme.TextHigh
 import dev.hazel.code.ui.theme.TextLow
 import dev.hazel.code.ui.theme.TextMid
+import kotlinx.coroutines.launch
 import java.io.File
+
+/**
+ * How wide each control in the editor bar is.
+ *
+ * Down from the 44 a lone icon would take. The bar carries seven of them beside a
+ * filename now, and at 44 apiece the name was down to a few characters before its
+ * ellipsis.
+ */
+private val BAR_ICON = 40.dp
 
 @Composable
 fun EditorScreen(
@@ -90,6 +109,40 @@ fun EditorScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
     var infoOpen by remember { mutableStateOf(false) }
+    var setupOpen by remember { mutableStateOf(false) }
+    var runtimesOpen by remember { mutableStateOf(false) }
+
+    // Shared with the rest of the app rather than owned by this screen: an install is a
+    // long download that must not be abandoned because a dialog closed.
+    val setup: SetupViewModel = viewModel()
+    val terminal: TerminalViewModel = viewModel()
+    val scope = rememberCoroutineScope()
+
+    /** What this file would be run with, or null when nothing here runs it. */
+    val runtime = remember(file.name) { Runtime.forFile(file.name) }
+
+    /**
+     * Opens the terminal, or the thing standing in its way.
+     *
+     * The same gate serves both buttons: there is no point opening a console onto a
+     * runner that is not answering, and no point running a file with a language that is
+     * not installed. Each obstacle leads to the dialog that clears it rather than to an
+     * error.
+     */
+    fun withRunner(needs: Runtime?, then: () -> Unit) {
+        scope.launch {
+            val dir = file.parent ?: file.absolutePath
+            if (terminal.preflight(dir) !is Readiness.Ready) {
+                setupOpen = true
+                return@launch
+            }
+            if (needs != null && !terminal.isInstalled(needs)) {
+                runtimesOpen = true
+                return@launch
+            }
+            then()
+        }
+    }
 
     LaunchedEffect(file.absolutePath) { vm.load(file) }
     LaunchedEffect(vm.message) {
@@ -161,12 +214,30 @@ fun EditorScreen(
                 showPreviewToggle = isMarkdown,
                 previewing = !editing,
                 showHistory = editing && !vm.readOnly,
+                showTerminal = terminal.supported,
+                showRun = terminal.supported && runtime != null,
+                running = terminal.running,
                 canUndo = vm.canUndo,
                 canRedo = vm.canRedo,
                 onBack = { leave() },
+                onTitle = { infoOpen = true },
                 onTogglePreview = { vm.switchMode(if (editing) ViewMode.PREVIEW else ViewMode.EDIT) },
                 onUndo = { vm.undo() },
                 onRedo = { vm.redo() },
+                onTerminal = {
+                    withRunner(needs = null) {
+                        terminal.openAt(file.parent ?: file.absolutePath)
+                    }
+                },
+                onRun = {
+                    val language = runtime ?: return@EditorBar
+                    withRunner(needs = language) {
+                        // Saved first: the runner reads the file from disk and knows
+                        // nothing about a buffer that has not been written yet.
+                        if (vm.dirty) vm.save { saved -> if (saved) terminal.runFile(file, language) }
+                        else terminal.runFile(file, language)
+                    }
+                },
                 onSave = { vm.save() },
                 onMenu = { menuOpen = true },
                 menu = {
@@ -179,6 +250,16 @@ fun EditorScreen(
                             menuOpen = false
                         },
                         onInfo = { infoOpen = true; menuOpen = false },
+                        onSetup = if (setup.supported) {
+                            { setupOpen = true; menuOpen = false }
+                        } else {
+                            null
+                        },
+                        onRuntimes = if (setup.supported) {
+                            { runtimesOpen = true; menuOpen = false }
+                        } else {
+                            null
+                        },
                     )
                 },
             )
@@ -249,24 +330,25 @@ fun EditorScreen(
         }
     }
 
+    TerminalSheet(terminal)
+
+    if (setupOpen) {
+        RunnerSetupDialog(vm = setup, onDismiss = { setupOpen = false })
+    }
+
+    if (runtimesOpen) {
+        RuntimePickerDialog(vm = setup, onDismiss = { runtimesOpen = false })
+    }
+
     if (infoOpen) {
-        ConfirmDialog(
-            title = file.name,
-            body = buildString {
-                appendLine(file.absolutePath)
-                appendLine()
-                appendLine("Size      ${Fmt.size(file.length())}")
-                appendLine("Modified  ${Fmt.date(file.lastModified())}")
-                appendLine("Type      ${vm.language.label}")
-                appendLine("Lines     ${vm.value.text.count { it == '\n' } + 1}")
-                append("Characters ${vm.value.text.length}")
-            },
-            confirmLabel = "Copy path",
+        FileInfoSheet(
+            file = file,
+            language = vm.language.label,
+            lines = vm.value.text.count { it == '\n' } + 1,
+            characters = vm.value.text.length,
+            onCopyPath = { copyToClipboard(file.absolutePath) },
             onDismiss = { infoOpen = false },
-        ) {
-            copyToClipboard(file.absolutePath)
-            infoOpen = false
-        }
+        )
     }
 }
 
@@ -315,10 +397,16 @@ private fun EditorBar(
     showHistory: Boolean,
     canUndo: Boolean,
     canRedo: Boolean,
+    showTerminal: Boolean,
+    showRun: Boolean,
+    running: Boolean,
     onBack: () -> Unit,
+    onTitle: () -> Unit,
     onTogglePreview: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
+    onTerminal: () -> Unit,
+    onRun: () -> Unit,
     onSave: () -> Unit,
     onMenu: () -> Unit,
     menu: @Composable () -> Unit,
@@ -327,12 +415,21 @@ private fun EditorBar(
         Modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 6.dp),
+            .padding(start = 2.dp, end = 2.dp, top = 8.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BarIcon(Ico.Back, "Back", onClick = onBack)
 
-        Column(Modifier.weight(1f).padding(start = 6.dp)) {
+        // The name is the handle for everything about the file, so it opens the sheet that
+        // says everything about the file. A path is the thing people most often need out
+        // of an editor and least often have anywhere to read.
+        Column(
+            Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(Radii.sm))
+                .clickable(onClick = onTitle)
+                .padding(start = 6.dp, top = 2.dp, bottom = 2.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     name,
@@ -364,6 +461,23 @@ private fun EditorBar(
             )
         }
 
+        // The terminal opens a console on this file's folder; run sends the file itself
+        // through it. Both are absent in a build that cannot run code, and run is absent
+        // for a language nothing here knows how to start.
+        if (showTerminal) {
+            BarIcon(Ico.Terminal, "Terminal", onClick = onTerminal)
+        }
+        if (showRun) {
+            BarIcon(
+                Ico.Play,
+                "Run",
+                enabled = !running,
+                tint = if (running) TextLow.copy(alpha = 0.45f)
+                else MaterialTheme.colorScheme.primary,
+                onClick = onRun,
+            )
+        }
+
         // Undo and redo are in the menu as well, but taking back a typo is the most
         // repeated action in an editor and it should not cost two taps and a menu. They
         // appear only while there is text being edited, so a preview or a read-only file
@@ -385,7 +499,7 @@ private fun EditorBar(
             )
         }
 
-        Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(BAR_ICON), contentAlignment = Alignment.Center) {
             AnimatedContent(
                 targetState = saving,
                 transitionSpec = { fadeIn(Motion.snappy()) togetherWith fadeOut(Motion.snappy()) },
@@ -419,6 +533,9 @@ private fun EditorMenu(
     onDismiss: () -> Unit,
     onCopyAll: () -> Unit,
     onInfo: () -> Unit,
+    /** Both null in a build that cannot run code, which is how the rows stay out of it. */
+    onSetup: (() -> Unit)?,
+    onRuntimes: (() -> Unit)?,
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -460,6 +577,8 @@ private fun EditorMenu(
         HairlineDivider(Modifier.padding(vertical = 4.dp))
         MenuRow(Ico.Copy, "Copy all", onClick = onCopyAll)
         MenuRow(Ico.Info, "File info", onClick = onInfo)
+        onSetup?.let { MenuRow(Ico.Wrench, "Set up terminal", onClick = it) }
+        onRuntimes?.let { MenuRow(Ico.Terminal, "Install languages", onClick = it) }
     }
 }
 
@@ -562,17 +681,17 @@ private fun BarIcon(
     val scale by animateFloatAsState(if (pressed) 0.88f else 1f, Motion.snappy(), label = "tap")
     Box(
         Modifier
-            .size(44.dp)
+            .size(BAR_ICON)
             .scale(scale)
             .clip(CircleShape)
             .clickable(
                 interactionSource = interaction,
-                indication = androidx.compose.material3.ripple(bounded = false, radius = 22.dp),
+                indication = androidx.compose.material3.ripple(bounded = false, radius = 20.dp),
                 enabled = enabled,
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, label, Modifier.size(20.dp), tint = tint)
+        Icon(icon, label, Modifier.size(19.dp), tint = tint)
     }
 }

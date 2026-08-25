@@ -7,6 +7,56 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **The filename opens a sheet about the file.** Full path, folder, size, modified, type,
+  lines, characters, and whether it is writable, all selectable so any of it can be
+  copied. A path is the thing people most often need out of an editor and least often
+  have anywhere to read.
+- **Terminal setup and language install are reachable from the file browser too**, through
+  a new overflow menu that also copies the current folder's path. Setting up a terminal
+  has nothing to do with any one file, so it no longer requires opening one.
+- **A stop control in the terminal**, for when a command is taking longer than it should.
+  It stops the waiting rather than the command, which the note it leaves says out loud:
+  there is no way to reach into the runner and kill a process.
+- **A terminal, as a sheet over the editor.** Two buttons in the editor bar, F-Droid
+  build only: the terminal opens a console on the folder of the file you are editing and
+  waits for commands; run sends the file itself through it, saving first because the
+  runner reads from disk. Either one, tapped before the terminal app is set up, opens the
+  step that clears the way rather than reporting an error.
+- **Everything a program prints is shown, whole.** Standard output and standard error
+  both, unedited, before any of our own commentary, and printed even when the run failed
+  on our side, because a program that managed three lines wrote three useful lines. A
+  traceback is the part of a failed run that explains it, and an editor that replaced it
+  with an exit code would be taking away the only thing worth reading. The scrollback is
+  selectable so an error can be copied, and when output was too large to pass back whole
+  the terminal says how much is missing rather than letting a cut-off trace look complete.
+- **The prompt reads `~ $`.** The working directory is announced once when it changes and
+  then stays out of the way. `cd` is handled here, since each command is its own process
+  and nothing carries between them, and it is checked against the filesystem rather than
+  believed: walking into a directory that is not there would otherwise break every
+  command after it for a reason the terminal already knew.
+- **A setup flow for the terminal**, in the F-Droid build only. Two dialogs: the first
+  gets the runner installed, permitted and willing to take orders, showing which rung of
+  that ladder you are on and the two commands to paste, each with a copy button and the
+  reason it exists; the second offers Python, C and Go to install, none preselected, with
+  a size beside each, Skip, and the command to run by hand instead. Reachable from the
+  editor menu, and it will open by itself when a run needs something that is not there.
+- **A language installer that thinks before it downloads.** Anything already present is
+  skipped rather than fetched again, the rest go smallest first so something works within
+  a minute, packages wanted by two languages are asked for once, and one language failing
+  leaves the others to finish. A package manager that reports success is not believed
+  until the program it installed actually answers.
+- **Two builds from one codebase.** The `fdroid` flavour, which is what GitHub releases
+  ship and keeps the existing `dev.hazel.code` id, is the one that can hand a file to a
+  separately installed Termux. The `playstore` flavour carries no execution code and no
+  Termux permission at all: not disabled at runtime, not shrunk away, simply never
+  compiled into it. `docs/DISTRIBUTION-SPLIT.md` explains where each kind of change
+  belongs.
+- **An `ExecutionProvider` seam.** Shared code asks where code can run and reacts to the
+  answer, without naming Termux or knowing which build it is in. Nothing calls it yet.
+- **A runtime catalogue** covering Python, C and Go, with the packages each needs, the
+  command that proves it is installed, and the shell line that runs a file. C compiles
+  into Termux's own temporary directory rather than beside the source, because Android
+  mounts shared storage non-executable and the program would be refused where it sat.
 - **Undo and redo in the editor bar**, beside save. Taking back a typo is the most
   repeated action in an editor and it cost two taps and a menu. They show only while text
   is being edited, so a preview or a read-only file does not spend bar width on them, and
@@ -44,6 +94,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   tests. Packaging (debug + release through R8) runs on `main`.
 
 ### Fixed
+- **Every command hung for a minute and then said "Timed out".** Termux refuses a command
+  from an app it has not been told to trust by posting a notification of its own and never
+  replying, so the terminal sat waiting for an answer that was never coming while the real
+  explanation was on the notification shade. The channel is now tested with an `echo`
+  before the terminal opens, and silence for seven seconds is read as the refusal it is
+  and answered with the step that fixes it.
+- **The setup command could not repair a file that was already wrong.** It appended the
+  property only when it was absent, so a `termux.properties` carrying it commented out,
+  spaced differently, or set to false was left exactly as it was. Every form of the line
+  is now removed before one clean one is written, and the command prints `done` when it
+  worked.
+- **The terminal opened at half height with its prompt below the fold**, which is the one
+  part of a terminal that has to be reachable the moment it opens. It opens full height,
+  the prompt sits on top of the keyboard, and it carries a placeholder rather than an
+  empty line.
+- **Undo and redo sat lower than the icons beside them.** Their arc swung two units below
+  the grid everything else is drawn on. Redrawn to the same optical centre, and the bar's
+  controls are tighter so seven of them and a filename fit a phone.
 - **The starting window drew the old, filled mark.** The launcher icon was corrected but
   the splash drawable was not, so the app opened on the blob for a moment and then swapped
   to the outlined bolt once its own screens took over. Both are stroked now.
