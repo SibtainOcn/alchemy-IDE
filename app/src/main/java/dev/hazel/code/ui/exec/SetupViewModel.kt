@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.hazel.code.data.Prefs
+import dev.hazel.code.exec.ConsoleLine
 import dev.hazel.code.exec.Execution
 import dev.hazel.code.exec.ExecutionProvider
 import dev.hazel.code.exec.InstallPlanner
@@ -47,6 +48,16 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     var installing by mutableStateOf(false)
+        private set
+
+    /**
+     * Everything the package manager printed, kept for the Logs button.
+     *
+     * Whole and unsummarised. A failed install is a wall of apt output with one useful
+     * line somewhere in it, and choosing that line on the user's behalf has already been
+     * wrong once.
+     */
+    var log by mutableStateOf(emptyList<ConsoleLine>())
         private set
 
     /** The runtimes this install was asked for, so progress can be counted against it. */
@@ -113,10 +124,21 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
         installStates = installStates + plan.associateWith { InstallState.Waiting }
 
         viewModelScope.launch {
-            provider.install(plan) { runtime, state ->
-                installStates = installStates + (runtime to state)
-                if (state == InstallState.Installed) present = present + runtime
-            }
+            provider.install(
+                runtimes = plan,
+                onState = { runtime, state ->
+                    installStates = installStates + (runtime to state)
+                    if (state == InstallState.Installed) present = present + runtime
+                },
+                onOutput = { runtime, result ->
+                    log = log + buildList {
+                        add(ConsoleLine.Typed(runtime.installCommand))
+                        if (result.stdout.isNotBlank()) add(ConsoleLine.Output(result.stdout.trimEnd()))
+                        if (result.stderr.isNotBlank()) add(ConsoleLine.Error(result.stderr.trimEnd()))
+                        add(ConsoleLine.Note("${runtime.label}: exit ${result.exitCode ?: "none"}"))
+                    }
+                },
+            )
             installing = false
         }
     }

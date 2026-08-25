@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **A Logs button on the language installer**, which puts everything the package manager
+  printed into the terminal, unedited. A failed install is a few hundred lines of apt with
+  one useful line somewhere in it, and a dialog has room for one line.
+- **An options menu in the terminal**: text size, whether each command reports how long it
+  took, and copying the whole session out at once. Both settings are remembered and kept
+  apart from the editor's own text size.
 - **The filename opens a sheet about the file.** Full path, folder, size, modified, type,
   lines, characters, and whether it is writable, all selectable so any of it can be
   copied. A path is the thing people most often need out of an editor and least often

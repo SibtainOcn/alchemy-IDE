@@ -337,7 +337,11 @@ fun EditorScreen(
     }
 
     if (runtimesOpen) {
-        RuntimePickerDialog(vm = setup, onDismiss = { runtimesOpen = false })
+        RuntimePickerDialog(
+            vm = setup,
+            onDismiss = { runtimesOpen = false },
+            onShowLogs = { runtimesOpen = false; terminal.showLog(setup.log) },
+        )
     }
 
     if (infoOpen) {

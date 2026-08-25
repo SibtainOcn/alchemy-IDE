@@ -251,6 +251,7 @@ private fun StepCard(number: Int, step: SetupStep, onCopy: () -> Unit) {
 fun RuntimePickerDialog(
     vm: SetupViewModel,
     onDismiss: () -> Unit,
+    onShowLogs: () -> Unit,
 ) {
     var selection by remember { mutableStateOf(emptySet<Runtime>()) }
     val plan = vm.plan(selection)
@@ -339,6 +340,12 @@ fun RuntimePickerDialog(
             }
         },
         dismissButton = {
+            // Whatever the package manager printed, in the terminal, unedited. An install
+            // that fails says why somewhere in a few hundred lines of apt, and the dialog
+            // has room for one of them.
+            if (vm.log.isNotEmpty()) {
+                TextButton(onClick = onShowLogs) { Text("Logs", color = TextMid) }
+            }
             // Always live, including mid-install. The download belongs to the view model
             // rather than to this dialog, so closing it is leaving the room, not pulling
             // the plug.

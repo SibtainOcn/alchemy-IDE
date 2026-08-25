@@ -25,6 +25,8 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -46,6 +48,8 @@ import androidx.compose.ui.unit.sp
 import dev.hazel.code.exec.ConsoleLine
 import dev.hazel.code.ui.common.Ico
 import dev.hazel.code.ui.common.ShapeLoader
+import dev.hazel.code.ui.common.rememberCopyToClipboard
+import dev.hazel.code.ui.theme.Radii
 import dev.hazel.code.ui.theme.CodeFont
 import dev.hazel.code.ui.theme.Hairline
 import dev.hazel.code.ui.theme.InkRaised
@@ -111,7 +115,8 @@ fun TerminalSheet(vm: TerminalViewModel) {
                         start = 14.dp, end = 14.dp, top = 10.dp, bottom = 10.dp,
                     ),
                 ) {
-                    items(vm.lines.size) { index -> ConsoleRow(vm.lines[index]) }
+                    val visible = vm.lines.filter { vm.showTimings || it !is ConsoleLine.Timing }
+                    items(visible.size) { index -> ConsoleRow(visible[index], vm.fontSizeSp) }
                 }
             }
 
@@ -133,6 +138,9 @@ fun TerminalSheet(vm: TerminalViewModel) {
 
 @Composable
 private fun Header(vm: TerminalViewModel) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val copy = rememberCopyToClipboard()
+
     Row(
         Modifier
             .fillMaxWidth()
@@ -152,6 +160,69 @@ private fun Header(vm: TerminalViewModel) {
         }
 
         SmallAction(Ico.Trash, "Clear") { vm.clear() }
+
+        Box {
+            SmallAction(Ico.More, "Options") { menuOpen = true }
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = RoundedCornerShape(Radii.md),
+                modifier = Modifier.width(258.dp),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Text size",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextHigh,
+                        modifier = Modifier.weight(1f),
+                    )
+                    SmallAction(Ico.Minus, "Smaller") { vm.setFontSize(vm.fontSizeSp - 1) }
+                    Text(
+                        "${vm.fontSizeSp}",
+                        fontFamily = CodeFont,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.width(28.dp),
+                    )
+                    SmallAction(Ico.Plus, "Bigger") { vm.setFontSize(vm.fontSizeSp + 1) }
+                }
+
+                DropdownMenuItem(
+                    onClick = { vm.toggleTimings() },
+                    text = {
+                        Text(
+                            "Show timings",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextHigh,
+                        )
+                    },
+                    trailingIcon = {
+                        Text(
+                            if (vm.showTimings) "On" else "Off",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (vm.showTimings) MaterialTheme.colorScheme.primary
+                            else TextLow,
+                        )
+                    },
+                )
+
+                DropdownMenuItem(
+                    onClick = { menuOpen = false; copy(vm.transcript()) },
+                    text = {
+                        Text(
+                            "Copy everything",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextHigh,
+                        )
+                    },
+                )
+            }
+        }
+
         SmallAction(Ico.Close, "Close") { vm.close() }
     }
 }
@@ -175,21 +246,27 @@ private fun SmallAction(
 
 /** One entry of scrollback. Everything is monospace; only the colour separates the kinds. */
 @Composable
-private fun ConsoleRow(line: ConsoleLine) {
+private fun ConsoleRow(line: ConsoleLine, sizeSp: Int) {
     val accents = LocalAccents.current
+    val body = sizeSp.sp
+    val bodyLine = (sizeSp * 1.45f).sp
+    // Notes and timings are the app talking rather than the program, so they stay a step
+    // smaller than the output whatever size the output is set to.
+    val aside = (sizeSp - 1).coerceAtLeast(8).sp
+
     when (line) {
         is ConsoleLine.Typed -> Row(Modifier.padding(top = 6.dp)) {
             Text(
                 PROMPT,
                 fontFamily = CodeFont,
-                fontSize = 12.5.sp,
+                fontSize = body,
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
                 line.command,
                 fontFamily = CodeFont,
-                fontSize = 12.5.sp,
-                lineHeight = 18.sp,
+                fontSize = body,
+                lineHeight = bodyLine,
                 color = TextHigh,
             )
         }
@@ -197,24 +274,33 @@ private fun ConsoleRow(line: ConsoleLine) {
         is ConsoleLine.Output -> Text(
             line.text,
             fontFamily = CodeFont,
-            fontSize = 12.5.sp,
-            lineHeight = 18.sp,
+            fontSize = body,
+            lineHeight = bodyLine,
             color = TextMid,
         )
 
         is ConsoleLine.Error -> Text(
             line.text,
             fontFamily = CodeFont,
-            fontSize = 12.5.sp,
-            lineHeight = 18.sp,
+            fontSize = body,
+            lineHeight = bodyLine,
             color = MaterialTheme.colorScheme.error,
         )
 
         is ConsoleLine.Note -> Text(
             line.text,
             fontFamily = CodeFont,
-            fontSize = 11.sp,
-            lineHeight = 16.sp,
+            fontSize = aside,
+            lineHeight = bodyLine,
+            color = accents.comment,
+            modifier = Modifier.padding(bottom = 2.dp),
+        )
+
+        is ConsoleLine.Timing -> Text(
+            line.text,
+            fontFamily = CodeFont,
+            fontSize = aside,
+            lineHeight = bodyLine,
             color = accents.comment,
             modifier = Modifier.padding(bottom = 2.dp),
         )

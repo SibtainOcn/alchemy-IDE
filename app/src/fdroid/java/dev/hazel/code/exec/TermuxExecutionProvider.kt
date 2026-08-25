@@ -151,6 +151,7 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
     override suspend fun install(
         runtimes: List<Runtime>,
         onState: (Runtime, InstallState) -> Unit,
+        onOutput: (Runtime, RunResult) -> Unit,
     ) {
         runtimes.forEach { runtime ->
             onState(runtime, InstallState.Installing)
@@ -162,6 +163,8 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
                     timeoutMs = INSTALL_TIMEOUT_MS,
                 )
             )
+
+            onOutput(runtime, result)
 
             val state = when {
                 result.failure == RunFailure.TimedOut ->

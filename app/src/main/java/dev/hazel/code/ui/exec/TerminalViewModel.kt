@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dev.hazel.code.data.Prefs
 import dev.hazel.code.exec.Console
 import dev.hazel.code.exec.ConsoleLine
 import dev.hazel.code.exec.Execution
@@ -32,6 +33,7 @@ import java.io.File
 class TerminalViewModel(app: Application) : AndroidViewModel(app) {
 
     private val provider: ExecutionProvider = Execution.provider(app)
+    private val prefs = Prefs(app)
     private var job: Job? = null
 
     val supported: Boolean get() = provider.supported
@@ -52,6 +54,47 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
     /** True while the channel is being checked, before the sheet is worth opening. */
     var checking by mutableStateOf(false)
         private set
+
+    var fontSizeSp by mutableStateOf(prefs.terminalFontSp)
+        private set
+
+    /** Whether each command reports how long it took. */
+    var showTimings by mutableStateOf(prefs.terminalTimings)
+        private set
+
+    fun setFontSize(sp: Int) {
+        fontSizeSp = sp.coerceIn(8, 22)
+        prefs.terminalFontSp = fontSizeSp
+    }
+
+    fun toggleTimings() {
+        showTimings = !showTimings
+        prefs.terminalTimings = showTimings
+    }
+
+    /** Everything on screen, as text, for copying a whole session out at once. */
+    fun transcript(): String = lines.joinToString("\n") { line ->
+        when (line) {
+            is ConsoleLine.Typed -> "$ ${line.command}"
+            is ConsoleLine.Output -> line.text
+            is ConsoleLine.Error -> line.text
+            is ConsoleLine.Note -> line.text
+            is ConsoleLine.Timing -> line.text
+        }
+    }
+
+    /**
+     * Shows a log produced somewhere else, such as an install.
+     *
+     * Appended to the same scrollback rather than shown in a place of its own: the output
+     * of `pkg install` is terminal output, and the terminal is where someone will look
+     * for it again afterwards.
+     */
+    fun showLog(log: List<ConsoleLine>) {
+        if (log.isEmpty()) return
+        lines = (lines + log).takeLast(MAX_LINES)
+        open = true
+    }
 
     /**
      * Opens the sheet, pointing at [dir].
@@ -197,7 +240,7 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
             reportFailure(result, fallback = "could not run")
         } else {
             append(
-                ConsoleLine.Note(
+                ConsoleLine.Timing(
                     Console.summarise(result.exitCode, System.currentTimeMillis() - startedAt)
                 )
             )
