@@ -63,10 +63,10 @@ object Termux {
         versionCode: Long?,
         permissionGranted: Boolean,
     ): Readiness = when {
-        !installed -> Readiness.TermuxMissing
-        installerPackage == PLAY_STORE_PACKAGE -> Readiness.TermuxFromPlayStore
+        !installed -> Readiness.RunnerMissing
+        installerPackage == PLAY_STORE_PACKAGE -> Readiness.RunnerFromAppStore
         versionCode != null && versionCode < MINIMUM_VERSION_CODE ->
-            Readiness.TermuxTooOld(versionCode.toString())
+            Readiness.RunnerTooOld(versionCode.toString())
         !permissionGranted -> Readiness.PermissionMissing
         else -> Readiness.Ready
     }

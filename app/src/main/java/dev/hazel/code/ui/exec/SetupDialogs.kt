@@ -105,7 +105,7 @@ fun RunnerSetupDialog(
             Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
                 StatusLine(readiness, vm.checking, guide.runnerName)
 
-                if (readiness is Readiness.TermuxMissing || readiness is Readiness.TermuxFromPlayStore) {
+                if (readiness is Readiness.RunnerMissing || readiness is Readiness.RunnerFromAppStore) {
                     guide.downloadNote?.let {
                         Spacer(Modifier.height(10.dp))
                         Text(it, style = MaterialTheme.typography.bodySmall, color = TextMid)
@@ -175,12 +175,12 @@ private fun StatusLine(readiness: Readiness?, checking: Boolean, runner: String)
     val (text, good) = when {
         checking || readiness == null -> "Checking..." to false
         readiness is Readiness.Ready -> "$runner is ready." to true
-        readiness is Readiness.TermuxMissing -> "$runner is not installed yet." to false
-        readiness is Readiness.TermuxFromPlayStore ->
+        readiness is Readiness.RunnerMissing -> "$runner is not installed yet." to false
+        readiness is Readiness.RunnerFromAppStore ->
             "This $runner came from Google Play. That build cannot take commands from " +
                 "other apps and cannot be updated into one that can, so it has to be " +
                 "replaced." to false
-        readiness is Readiness.TermuxTooOld ->
+        readiness is Readiness.RunnerTooOld ->
             "This $runner is too old for the interface this uses. Update it." to false
         readiness is Readiness.PermissionMissing ->
             "This app needs your permission to talk to $runner." to false

@@ -95,7 +95,7 @@ enum class RunFailure {
     /** The runner is installed but not ready; call [ExecutionProvider.readiness]. */
     NotReady,
 
-    /** Termux accepted the command but is not allowed to take orders from other apps. */
+    /** The runner accepted the command but is not allowed to take orders from other apps. */
     ExternalAppsDisabled,
 
     /** Nothing came back inside the time allowed. */
@@ -118,25 +118,29 @@ sealed interface Readiness {
     /** This build cannot run code at all, by design. */
     data object Unsupported : Readiness
 
-    /** Termux is not installed. */
-    data object TermuxMissing : Readiness
+    /** The runner is not installed. */
+    data object RunnerMissing : Readiness
 
     /**
-     * Termux is installed from Google Play. That build is frozen years behind and cannot
-     * take commands from other apps, so it has to be replaced rather than updated.
+     * The runner came from an app store that ships a crippled copy of it.
+     *
+     * Termux is the case this exists for: its Play Store build is frozen years behind and
+     * cannot take commands from other apps, so it has to be replaced rather than updated.
+     * Telling someone it is "too old" would send them looking for an update that will
+     * never arrive.
      */
-    data object TermuxFromPlayStore : Readiness
+    data object RunnerFromAppStore : Readiness
 
-    /** Termux is too old to have the interface this uses. */
-    data class TermuxTooOld(val versionName: String?) : Readiness
+    /** The runner is older than the interface this uses. */
+    data class RunnerTooOld(val versionName: String?) : Readiness
 
-    /** The user has not granted the permission that lets this app talk to Termux. */
+    /** The user has not granted the permission that lets this app talk to the runner. */
     data object PermissionMissing : Readiness
 
     /**
-     * Termux is refusing commands from other apps.
+     * The runner is refusing commands from other apps.
      *
-     * This one cannot be detected in advance: the setting lives inside Termux's own
+     * This one cannot be detected in advance: the setting lives inside the runner's own
      * config file, which is not readable from here. It is only ever reported after a run
      * comes back rejected.
      */

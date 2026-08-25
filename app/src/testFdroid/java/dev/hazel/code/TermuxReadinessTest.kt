@@ -29,7 +29,7 @@ class TermuxReadinessTest {
 
     @Test
     fun `not installed is reported before anything else`() {
-        assertEquals(Readiness.TermuxMissing, readiness(installed = false, permission = false))
+        assertEquals(Readiness.RunnerMissing, readiness(installed = false, permission = false))
     }
 
     @Test
@@ -38,7 +38,7 @@ class TermuxReadinessTest {
         // it has to be replaced rather than fixed. Saying "too old" would send the user
         // to check for updates that will never come.
         assertEquals(
-            Readiness.TermuxFromPlayStore,
+            Readiness.RunnerFromAppStore,
             readiness(installer = Termux.PLAY_STORE_PACKAGE),
         )
     }
@@ -51,7 +51,7 @@ class TermuxReadinessTest {
     @Test
     fun `a version below the interface we use is reported as too old`() {
         val readiness = readiness(versionCode = 117)
-        assertTrue(readiness is Readiness.TermuxTooOld)
+        assertTrue(readiness is Readiness.RunnerTooOld)
     }
 
     @Test
