@@ -54,11 +54,17 @@ jobs:
       - name: Gradle script syntax
         run: ./gradlew help --quiet
 
-      - name: Kotlin compile (app + tests)
-        run: ./gradlew :app:compileDebugKotlin :app:compileDebugUnitTestKotlin --stacktrace
+      # Both distributions. A change that compiles for one and not the other is exactly
+      # what the split makes possible, so both are built on every pull request.
+      - name: Kotlin compile (both flavours + tests)
+        run: >
+          ./gradlew
+          :app:compileFdroidDebugKotlin :app:compilePlaystoreDebugKotlin
+          :app:compileFdroidDebugUnitTestKotlin :app:compilePlaystoreDebugUnitTestKotlin
+          --stacktrace
 
       - name: Android Lint
-        run: ./gradlew :app:lintDebug
+        run: ./gradlew :app:lintFdroidDebug :app:lintPlaystoreDebug
 
       - name: Unit tests
         run: ./gradlew :app:testSummary :app:verifyTestFloor --stacktrace
@@ -70,9 +76,15 @@ jobs:
       # PR to re-prove something no PR had changed. On main it still runs on every merge,
       # so a shrinking problem is caught within one commit of arriving rather than at tag
       # time.
+      # The debug build of what ships from GitHub, plus a release pass through R8 for
+      # both distributions. Four full variants would re-prove the same shrinking twice.
       - name: Assemble debug and release
         if: github.event_name == 'push'
-        run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
+        run: >
+          ./gradlew
+          :app:assembleFdroidDebug
+          :app:assembleFdroidRelease :app:assemblePlaystoreRelease
+          --stacktrace
 
       # The test count is read from the JUnit XML, so the number on the PR is always the
       # number that actually ran.
@@ -82,14 +94,14 @@ jobs:
           if [ -f app/build/test-summary.md ]; then
             cat app/build/test-summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
-          if compgen -G "app/build/outputs/apk/*/*.apk" > /dev/null; then
+          if compgen -G "app/build/outputs/apk/*/*/*.apk" > /dev/null; then
             {
               echo
               echo "### APK size"
               echo
               echo "| Variant | Size |"
               echo "|---------|-----:|"
-              for apk in app/build/outputs/apk/*/*.apk; do
+              for apk in app/build/outputs/apk/*/*/*.apk; do
                 echo "| $(basename "$apk") | $(du -h "$apk" | cut -f1) |"
               done
             } >> "$GITHUB_STEP_SUMMARY"
@@ -100,7 +112,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hazel-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/fdroid/debug/*.apk
           retention-days: 14
 
       - name: Upload reports on failure

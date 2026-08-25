@@ -32,7 +32,7 @@ tasks.register("testSummary") {
 
     // Declared as a dependency rather than left to task ordering: without this the
     // summary can run first and report the previous run's numbers.
-    dependsOn("testDebugUnitTest")
+    dependsOn("testFdroidDebugUnitTest")
 
     val resultsDir = layout.buildDirectory.dir("test-results")
     val outputFile = layout.buildDirectory.file("test-summary.md")
@@ -84,7 +84,7 @@ tasks.register("verifyTestFloor") {
     group = "verification"
     description = "Fails if the total unit test count drops below the recorded floor."
 
-    dependsOn("testDebugUnitTest")
+    dependsOn("testFdroidDebugUnitTest")
 
     val floor = (project.findProperty("testFloor") as String?)?.toIntOrNull() ?: 0
     val resultsDir = layout.buildDirectory.dir("test-results")

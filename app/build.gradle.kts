@@ -76,6 +76,23 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    // Two distributions from one codebase. `fdroid` is the GitHub and F-Droid build and
+    // is the one that talks to Termux; `playstore` carries no execution code at all.
+    // docs/DISTRIBUTION-SPLIT.md explains where each kind of change belongs.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("fdroid") {
+            dimension = "distribution"
+            // Deliberately no applicationIdSuffix. This flavour is the build already
+            // released as dev.hazel.code, and changing its id would strand every install
+            // that has it: the update would arrive as a second, separate app.
+        }
+        create("playstore") {
+            dimension = "distribution"
+            applicationIdSuffix = ".ps"
+        }
+    }
+
     signingConfigs {
         if (canSign) {
             create("release") {
@@ -161,9 +178,11 @@ val packagedApkDir = layout.buildDirectory.dir("outputs/packaged")
 tasks.register("packageReleaseApks") {
     group = "distribution"
     description = "Copies the release APKs out under HAZEL-IDE-<CHANNEL>-v<version>-<abi>.apk names."
-    dependsOn("assembleRelease")
+    // The fdroid flavour is what ships from GitHub releases. The Play Store build is
+    // uploaded from its own bundle and never goes through this task.
+    dependsOn("assembleFdroidRelease")
 
-    val sourceDir = layout.buildDirectory.dir("outputs/apk/release")
+    val sourceDir = layout.buildDirectory.dir("outputs/apk/fdroid/release")
     val targetDir = packagedApkDir
     val version = appVersionName
     val channel = channelFor("release", appVersionName)
@@ -180,12 +199,12 @@ tasks.register("packageReleaseApks") {
 
         val checksums = StringBuilder()
         apks.forEach { apk ->
-            // app-arm64-v8a-release.apk         -> arm64-v8a
-            // app-universal-release-unsigned.apk -> universal
-            // app-release.apk                    -> universal
+            // app-fdroid-arm64-v8a-release.apk         -> arm64-v8a
+            // app-fdroid-universal-release-unsigned.apk -> universal
+            // app-fdroid-release.apk                    -> universal
             // Order matters: "-unsigned" is only present when no signing config applied.
             val abi = apk.name
-                .removePrefix("app-")
+                .removePrefix("app-fdroid-")
                 .removeSuffix(".apk")
                 .removeSuffix("-unsigned")
                 .removeSuffix("-release")

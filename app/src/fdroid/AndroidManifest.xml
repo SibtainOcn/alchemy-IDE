@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Merged into the shared manifest for the F-Droid and GitHub build only.
+
+  Neither of these reaches the Play Store build: they are not conditionally disabled
+  there, they are not part of that variant at all.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Termux declares this permission itself, at dangerous level, so it has to be granted
+      at runtime as well as declared here. Without it the run request is refused before
+      Termux sees it.
+    -->
+    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+
+    <!--
+      From Android 11 an app cannot see which other apps are installed unless it says
+      which ones it cares about. Without this the check for Termux reports "not
+      installed" on a device that has it.
+    -->
+    <queries>
+        <package android:name="com.termux" />
+    </queries>
+
+</manifest>

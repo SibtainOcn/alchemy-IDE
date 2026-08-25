@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **Two builds from one codebase.** The `fdroid` flavour, which is what GitHub releases
+  ship and keeps the existing `dev.hazel.code` id, is the one that can hand a file to a
+  separately installed Termux. The `playstore` flavour carries no execution code and no
+  Termux permission at all: not disabled at runtime, not shrunk away, simply never
+  compiled into it. `docs/DISTRIBUTION-SPLIT.md` explains where each kind of change
+  belongs.
+- **An `ExecutionProvider` seam.** Shared code asks where code can run and reacts to the
+  answer, without naming Termux or knowing which build it is in. Nothing calls it yet.
+- **A runtime catalogue** covering Python, C and Go, with the packages each needs, the
+  command that proves it is installed, and the shell line that runs a file. C compiles
+  into Termux's own temporary directory rather than beside the source, because Android
+  mounts shared storage non-executable and the program would be refused where it sat.
 - **Undo and redo in the editor bar**, beside save. Taking back a typo is the most
   repeated action in an editor and it cost two taps and a menu. They show only while text
   is being edited, so a preview or a read-only file does not spend bar width on them, and
