@@ -20,6 +20,8 @@ object NoExecutionProvider : ExecutionProvider {
 
     override suspend fun readiness(): Readiness = Readiness.Unsupported
 
+    override suspend fun verify(): Readiness = Readiness.Unsupported
+
     override suspend fun run(request: RunRequest): RunResult =
         RunResult(failure = RunFailure.Unsupported)
 
@@ -30,6 +32,8 @@ object NoExecutionProvider : ExecutionProvider {
     override fun launchIntent(): Intent? = null
 
     override val homeDirectory: String? get() = null
+
+    override suspend fun canReach(path: String): Boolean = false
 
     override suspend fun isInstalled(runtime: Runtime): Boolean = false
 

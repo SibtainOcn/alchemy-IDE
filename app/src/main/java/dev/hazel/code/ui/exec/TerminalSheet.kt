@@ -3,6 +3,7 @@ package dev.hazel.code.ui.exec
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -70,7 +71,9 @@ import dev.hazel.code.ui.theme.TextMid
 fun TerminalSheet(vm: TerminalViewModel) {
     if (!vm.open) return
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    // Straight to full height. A half sheet put the prompt below the fold, which is the
+    // one part of a terminal that has to be reachable the moment it opens.
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val accents = LocalAccents.current
@@ -86,10 +89,13 @@ fun TerminalSheet(vm: TerminalViewModel) {
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.background,
         dragHandle = null,
+        // The sheet keeps its own hands off the insets so the content can put the prompt
+        // exactly on top of the keyboard rather than behind it.
+        contentWindowInsets = { WindowInsets(0) },
     ) {
         Column(
             Modifier
-                .fillMaxHeight(0.72f)
+                .fillMaxHeight(0.94f)
                 .imePadding()
         ) {
             Header(vm)
@@ -118,6 +124,7 @@ fun TerminalSheet(vm: TerminalViewModel) {
                     vm.submit(input)
                     input = ""
                 },
+                onStop = { vm.cancel() },
             )
             Spacer(Modifier.navigationBarsPadding())
         }
@@ -221,6 +228,7 @@ private fun Prompt(
     running: Boolean,
     onValue: (String) -> Unit,
     onSubmit: () -> Unit,
+    onStop: () -> Unit,
 ) {
     Row(
         Modifier
@@ -256,10 +264,24 @@ private fun Prompt(
             ),
             keyboardActions = KeyboardActions(onGo = { onSubmit() }),
             modifier = Modifier.weight(1f),
+            decorationBox = { field ->
+                if (value.isEmpty()) {
+                    Text(
+                        if (running) "running..." else "run a command",
+                        fontFamily = CodeFont,
+                        fontSize = 13.sp,
+                        color = TextLow.copy(alpha = 0.6f),
+                    )
+                }
+                field()
+            },
         )
 
-        if (value.isNotBlank() && !running) {
-            SmallAction(Ico.Play, "Run") { onSubmit() }
+        when {
+            // Stopping only stops the waiting; the command carries on inside the runner,
+            // which the note it leaves behind says out loud.
+            running -> SmallAction(Ico.Close, "Stop waiting", onClick = onStop)
+            value.isNotBlank() -> SmallAction(Ico.Play, "Run", onClick = onSubmit)
         }
     }
 }

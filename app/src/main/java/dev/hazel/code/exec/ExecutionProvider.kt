@@ -28,6 +28,21 @@ interface ExecutionProvider {
      */
     suspend fun readiness(): Readiness
 
+    /**
+     * The same question as [readiness], but answered by actually talking to the runner.
+     *
+     * Worth the round trip before a terminal session, because the most common failure
+     * cannot be seen any other way: a runner that is installed, permitted and refusing
+     * commands looks identical from here to one that is working, and it answers a refusal
+     * with a notification of its own rather than by replying. Silence is the only signal,
+     * so silence has to be waited for once, deliberately, rather than discovered by every
+     * command the user types.
+     *
+     * It doubles as a way to wake the runner: a background command starts its service
+     * whether or not the app was running.
+     */
+    suspend fun verify(): Readiness
+
     /** Runs one command and returns everything it wrote. */
     suspend fun run(request: RunRequest): RunResult
 
@@ -55,6 +70,15 @@ interface ExecutionProvider {
      * private storage, and that is where it starts.
      */
     val homeDirectory: String?
+
+    /**
+     * Whether the runner can see [path].
+     *
+     * A separate question from whether it is answering. The runner keeps its own private
+     * storage and starts out unable to read the shared storage this app edits in, so a
+     * perfectly healthy runner can still fail every command with "no such file".
+     */
+    suspend fun canReach(path: String): Boolean
 
     /** Whether [runtime] is installed and on PATH. False when that cannot be established. */
     suspend fun isInstalled(runtime: Runtime): Boolean
@@ -158,6 +182,18 @@ sealed interface Readiness {
 
     /** The user has not granted the permission that lets this app talk to the runner. */
     data object PermissionMissing : Readiness
+
+    /** The runner is answering but cannot see the folder the file is in. */
+    data object StorageUnreachable : Readiness
+
+    /**
+     * The runner is installed and permitted but did not answer.
+     *
+     * Almost always one of two things: it is refusing commands from other apps, or it has
+     * not been started since it was installed. Both are worth saying, because there is no
+     * way from here to tell which, and the fix for one is next to the fix for the other.
+     */
+    data object RunnerNotAnswering : Readiness
 
     /**
      * The runner is refusing commands from other apps.

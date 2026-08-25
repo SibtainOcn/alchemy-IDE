@@ -80,7 +80,6 @@ import dev.hazel.code.ui.theme.TextMid
 fun RunnerSetupDialog(
     vm: SetupViewModel,
     onDismiss: () -> Unit,
-    onContinue: () -> Unit,
 ) {
     val guide = vm.guide ?: return
     val context = LocalContext.current
@@ -146,14 +145,8 @@ fun RunnerSetupDialog(
             }
         },
         confirmButton = {
-            if (readiness is Readiness.Ready) {
-                TextButton(onClick = onContinue) {
-                    Text("Choose languages", color = MaterialTheme.colorScheme.primary)
-                }
-            } else {
-                TextButton(onClick = { vm.refresh() }, enabled = !vm.checking) {
-                    Text("Check again", color = MaterialTheme.colorScheme.primary)
-                }
+            TextButton(onClick = { vm.refresh() }, enabled = !vm.checking) {
+                Text("Check again", color = MaterialTheme.colorScheme.primary)
             }
         },
         dismissButton = {
@@ -184,6 +177,12 @@ private fun StatusLine(readiness: Readiness?, checking: Boolean, runner: String)
             "This $runner is too old for the interface this uses. Update it." to false
         readiness is Readiness.PermissionMissing ->
             "This app needs your permission to talk to $runner." to false
+        readiness is Readiness.RunnerNotAnswering ->
+            "$runner is installed and allowed, but did not answer. Either it is refusing " +
+                "commands from other apps, or it has not been opened since it was " +
+                "installed. Run the commands below, then open $runner once." to false
+        readiness is Readiness.StorageUnreachable ->
+            "$runner cannot see your files yet. Run the second command below." to false
         readiness is Readiness.ExternalAppsDisabled ->
             "$runner is refusing commands from other apps. Run the first command below." to false
         readiness is Readiness.Unsupported -> "This build cannot run code." to false
@@ -257,6 +256,10 @@ fun RuntimePickerDialog(
     val plan = vm.plan(selection)
     val states = vm.installStates
 
+    // Ask what is already there every time this opens. Something installed by hand in the
+    // meantime should show as installed, not be offered as a quarter-gigabyte download.
+    LaunchedEffect(Unit) { vm.refresh() }
+
     AlertDialog(
         onDismissRequest = { if (!vm.installing) onDismiss() },
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -284,10 +287,29 @@ fun RuntimePickerDialog(
                     Spacer(Modifier.height(4.dp))
                 }
 
-                if (plan.isNotEmpty() && !vm.installing) {
-                    Spacer(Modifier.height(10.dp))
-                    Text(
+                Spacer(Modifier.height(10.dp))
+                when {
+                    vm.checking -> ProgressLine("Checking what is already installed...")
+
+                    vm.installing -> ProgressLine(
+                        buildString {
+                            append("Installing ${vm.finished + 1} of ${vm.queue.size}")
+                            vm.current?.let { append(": ${it.label}, ${it.downloadSize}") }
+                        }
+                    )
+
+                    plan.isNotEmpty() -> Text(
                         "About ${InstallPlanner.totalMb(plan)} MB, smallest first.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextLow,
+                    )
+                }
+
+                if (vm.installing) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "This keeps going if you close the dialog. Come back here to see " +
+                            "how it went.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextLow,
                     )
@@ -317,8 +339,18 @@ fun RuntimePickerDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !vm.installing) {
-                Text(if (states.isEmpty()) "Skip" else "Done", color = TextMid)
+            // Always live, including mid-install. The download belongs to the view model
+            // rather than to this dialog, so closing it is leaving the room, not pulling
+            // the plug.
+            TextButton(onClick = onDismiss) {
+                Text(
+                    when {
+                        vm.installing -> "Close"
+                        states.isEmpty() -> "Skip"
+                        else -> "Done"
+                    },
+                    color = TextMid,
+                )
             }
         },
     )
@@ -409,6 +441,16 @@ private fun detailFor(runtime: Runtime, state: InstallState?): String = when (st
     InstallState.InstalledButMissing ->
         "Installed, but ${runtime.probe} is still not found. Try running the command by hand."
     is InstallState.Failed -> state.reason
+}
+
+/** One line of live progress, with something moving beside it. */
+@Composable
+private fun ProgressLine(text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        ShapeLoader(size = 13.dp)
+        Spacer(Modifier.width(9.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = TextMid)
+    }
 }
 
 /** A small filled button, for the one action a dialog section is about. */

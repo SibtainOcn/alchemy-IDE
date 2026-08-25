@@ -49,6 +49,20 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
     var installing by mutableStateOf(false)
         private set
 
+    /** The runtimes this install was asked for, so progress can be counted against it. */
+    var queue by mutableStateOf(emptyList<Runtime>())
+        private set
+
+    /** How many of [queue] have finished, whether they worked or not. */
+    val finished: Int
+        get() = queue.count { installStates[it] is InstallState.Failed ||
+            installStates[it] == InstallState.Installed ||
+            installStates[it] == InstallState.InstalledButMissing }
+
+    /** What is downloading right now, for the one line that says so. */
+    val current: Runtime?
+        get() = queue.firstOrNull { installStates[it] == InstallState.Installing }
+
     /** Whether the setup flow has been offered before, so it is not shown unprompted twice. */
     val offeredBefore: Boolean get() = prefs.setupOffered
 
@@ -68,7 +82,10 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
         if (checking || installing) return
         checking = true
         viewModelScope.launch {
-            val state = provider.readiness()
+            // The deep check, not the cheap one: an installed and permitted runner that is
+            // refusing commands looks ready from the outside, and every question after
+            // this one is asked by running something.
+            val state = provider.verify()
             readiness = state
             present = if (state is Readiness.Ready) {
                 Runtime.entries.filter { provider.isInstalled(it) }.toSet()
@@ -92,6 +109,7 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
         if (plan.isEmpty()) return
 
         installing = true
+        queue = plan
         installStates = installStates + plan.associateWith { InstallState.Waiting }
 
         viewModelScope.launch {

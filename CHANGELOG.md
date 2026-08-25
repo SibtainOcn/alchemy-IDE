@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [Unreleased]
 
 ### Added
+- **The filename opens a sheet about the file.** Full path, folder, size, modified, type,
+  lines, characters, and whether it is writable, all selectable so any of it can be
+  copied. A path is the thing people most often need out of an editor and least often
+  have anywhere to read.
+- **Terminal setup and language install are reachable from the file browser too**, through
+  a new overflow menu that also copies the current folder's path. Setting up a terminal
+  has nothing to do with any one file, so it no longer requires opening one.
+- **A stop control in the terminal**, for when a command is taking longer than it should.
+  It stops the waiting rather than the command, which the note it leaves says out loud:
+  there is no way to reach into the runner and kill a process.
 - **A terminal, as a sheet over the editor.** Two buttons in the editor bar, F-Droid
   build only: the terminal opens a console on the folder of the file you are editing and
   waits for commands; run sends the file itself through it, saving first because the
@@ -84,6 +94,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   tests. Packaging (debug + release through R8) runs on `main`.
 
 ### Fixed
+- **Every command hung for a minute and then said "Timed out".** Termux refuses a command
+  from an app it has not been told to trust by posting a notification of its own and never
+  replying, so the terminal sat waiting for an answer that was never coming while the real
+  explanation was on the notification shade. The channel is now tested with an `echo`
+  before the terminal opens, and silence for seven seconds is read as the refusal it is
+  and answered with the step that fixes it.
+- **The setup command could not repair a file that was already wrong.** It appended the
+  property only when it was absent, so a `termux.properties` carrying it commented out,
+  spaced differently, or set to false was left exactly as it was. Every form of the line
+  is now removed before one clean one is written, and the command prints `done` when it
+  worked.
+- **The terminal opened at half height with its prompt below the fold**, which is the one
+  part of a terminal that has to be reachable the moment it opens. It opens full height,
+  the prompt sits on top of the keyboard, and it carries a placeholder rather than an
+  empty line.
+- **Undo and redo sat lower than the icons beside them.** Their arc swung two units below
+  the grid everything else is drawn on. Redrawn to the same optical centre, and the bar's
+  controls are tighter so seven of them and a filename fit a phone.
 - **The starting window drew the old, filled mark.** The launcher icon was corrected but
   the splash drawable was not, so the app opened on the blob for a moment and then swapped
   to the outlined bolt once its own screens took over. Both are stroked now.

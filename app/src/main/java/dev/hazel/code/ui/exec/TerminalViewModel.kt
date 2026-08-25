@@ -49,6 +49,10 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
     var running by mutableStateOf(false)
         private set
 
+    /** True while the channel is being checked, before the sheet is worth opening. */
+    var checking by mutableStateOf(false)
+        private set
+
     /**
      * Opens the sheet, pointing at [dir].
      *
@@ -66,6 +70,40 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
 
     fun close() {
         open = false
+    }
+
+    /**
+     * Everything that has to be true before a terminal is worth showing, checked in the
+     * order the user can fix them.
+     *
+     * Runs on every open rather than once at startup. Termux can be uninstalled, denied,
+     * reconfigured or simply not started since the last time, and finding that out from a
+     * command that never returns is the worst way to learn it.
+     */
+    suspend fun preflight(dir: String): Readiness {
+        checking = true
+        try {
+            val state = provider.verify()
+            if (state !is Readiness.Ready) return state
+            return if (provider.canReach(dir)) Readiness.Ready else Readiness.StorageUnreachable
+        } finally {
+            checking = false
+        }
+    }
+
+    /**
+     * Abandons whatever is running.
+     *
+     * Only on this side: the command itself carries on inside the runner, because there
+     * is no way to reach into it and stop a process. Said plainly rather than implied, so
+     * nobody assumes a long install was cancelled when it was only stopped being watched.
+     */
+    fun cancel() {
+        if (!running) return
+        job?.cancel()
+        job = null
+        running = false
+        append(ConsoleLine.Note("stopped waiting. The command may still be running in Termux."))
     }
 
     fun clear() {

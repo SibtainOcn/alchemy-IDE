@@ -95,8 +95,15 @@ object Ico {
     val Sort = stroked("sort", "M4 6.5 L15 6.5", "M4 12 L12 12", "M4 17.5 L9 17.5", "M17.5 8 L17.5 18", "M14.5 15 L17.5 18 L20.5 15")
     val Home = stroked("home", "M4 10.5 L12 4 l8 6.5", "M6.2 12 L6.2 19.5 L17.8 19.5 L17.8 12")
     val Save = stroked("save", "M5 5.8C5 5.4 5.4 5 5.8 5H16l3 3v10.2c0 .4-.4.8-.8.8H5.8c-.4 0-.8-.4-.8-.8Z", "M8 5 L8 10 L15 10 L15 5", "M8 19 L8 14 L16 14 L16 19")
-    val Undo = stroked("undo", "M8.5 8 L4.5 12 L8.5 16", "M4.5 12 H14a5.5 5.5 0 0 1 0 11h-2.5")
-    val Redo = stroked("redo", "M15.5 8 L19.5 12 L15.5 16", "M19.5 12 H10a5.5 5.5 0 0 0 0 11h2.5")
+    /**
+     * Undo and redo, drawn to sit level with the rest of the bar.
+     *
+     * The arc used to swing down to y=23 on a 24 grid, which put the ink of the glyph a
+     * couple of units below everything beside it: correct as geometry, visibly dropped as
+     * a row of icons. These span 6 to 19, so their optical centre is the centre.
+     */
+    val Undo = stroked("undo", "M9 6 L5 10 L9 14", "M5 10 H14a4.5 4.5 0 0 1 0 9h-2.5")
+    val Redo = stroked("redo", "M15 6 L19 10 L15 14", "M19 10 H10a4.5 4.5 0 0 0 0 9h2.5")
     val Wrap = stroked("wrap", "M4 6.5 L20 6.5", "M4 12 H16a3 3 0 0 1 0 6h-3", "M15 15 L12.5 18 L15 21", "M4 17.5 L9 17.5")
     val Indent = stroked("indent", "M4 6 L20 6", "M10 10.5 L20 10.5", "M10 15 L20 15", "M4 19.5 L20 19.5", "M4 10.5 L6.5 12.75 L4 15")
     val Dedent = stroked("dedent", "M4 6 L20 6", "M10 10.5 L20 10.5", "M10 15 L20 15", "M4 19.5 L20 19.5", "M6.5 10.5 L4 12.75 L6.5 15")

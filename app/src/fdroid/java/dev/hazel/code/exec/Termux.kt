@@ -86,15 +86,31 @@ object Termux {
     const val RELEASES_URL = "https://github.com/termux/termux-app/releases"
 
     /**
-     * The one line that lets Termux take commands from other apps.
+     * A command that proves the whole channel works, end to end.
      *
-     * Written to be safe to run twice: appending it blindly would stack duplicate lines
-     * in the config every time someone pasted it again.
+     * Cheap enough to run before every terminal session. It is the only way to know that
+     * external apps are allowed: Termux reports that refusal as a notification of its own
+     * and never answers the caller, so the absence of a reply is the signal.
+     */
+    const val HANDSHAKE = "echo hazel-ok"
+    const val HANDSHAKE_REPLY = "hazel-ok"
+
+    /**
+     * Rewrites the property rather than appending to it.
+     *
+     * The earlier version only appended when `grep` found nothing, which leaves a file
+     * that already carries the setting in some other shape exactly as it was: commented
+     * out, spelled with different spacing, or set to false. Deleting every form of the
+     * line first and writing one clean one is the version that fixes a broken file as
+     * well as an empty one, and it stays safe to run again.
      */
     const val ENABLE_EXTERNAL_APPS =
-        "mkdir -p ~/.termux && grep -q '^allow-external-apps' ~/.termux/termux.properties " +
-            "2>/dev/null || echo 'allow-external-apps = true' >> ~/.termux/termux.properties; " +
-            "termux-reload-settings"
+        "mkdir -p ~/.termux && " +
+            "touch ~/.termux/termux.properties && " +
+            "sed -i '/allow-external-apps/d' ~/.termux/termux.properties && " +
+            "echo 'allow-external-apps=true' >> ~/.termux/termux.properties && " +
+            "termux-reload-settings && " +
+            "echo done"
 
     /**
      * Termux cannot see the files Hazel edits until this has been run once.
@@ -121,8 +137,8 @@ object Termux {
         steps = listOf(
             SetupStep(
                 title = "Let Termux take commands",
-                why = "Termux ignores other apps until this is switched on. Safe to run " +
-                    "twice: it will not add the line again.",
+                why = "Termux ignores other apps until this is switched on. It prints " +
+                    "\"done\" when it worked. Safe to run again at any time.",
                 command = ENABLE_EXTERNAL_APPS,
             ),
             SetupStep(
@@ -130,6 +146,13 @@ object Termux {
                 why = "Your code lives in shared storage and Termux starts out able to " +
                     "see only its own. Android will ask you to allow it.",
                 command = GRANT_STORAGE,
+            ),
+            SetupStep(
+                title = "Close Termux completely, then reopen it",
+                why = "Swipe it out of recent apps. Reloading the settings is usually " +
+                    "enough, but the service that takes commands sometimes keeps the old " +
+                    "answer until Termux is started fresh.",
+                command = "exit",
             ),
         ),
     )

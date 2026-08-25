@@ -83,10 +83,24 @@ class TermuxReadinessTest {
     }
 
     @Test
-    fun `the setup line can be run twice without stacking duplicates`() {
-        // People paste it again when something else went wrong, and a config file with
-        // the same line four times is a support question of its own.
-        assertTrue(Termux.ENABLE_EXTERNAL_APPS.contains("grep -q"))
-        assertTrue(Termux.ENABLE_EXTERNAL_APPS.contains("termux-reload-settings"))
+    fun `the setup line repairs the property rather than appending to it`() {
+        // Appending only when the line is absent leaves a file that already carries the
+        // setting in some other shape exactly as it was: commented out, spaced
+        // differently, or set to false. Every form goes first, then one clean line, which
+        // also makes the command safe to paste again when something else went wrong.
+        val command = Termux.ENABLE_EXTERNAL_APPS
+        assertTrue("Removes whatever is there", command.contains("sed -i '/allow-external-apps/d'"))
+        assertTrue("Writes one clean line", command.contains("echo 'allow-external-apps=true'"))
+        assertTrue("Makes Termux re-read it", command.contains("termux-reload-settings"))
+        assertTrue("Says so when it worked", command.trimEnd().endsWith("echo done"))
+    }
+
+    @Test
+    fun `the handshake is something a working runner answers instantly`() {
+        // A refused command produces a Termux notification and no reply at all, so
+        // silence is the only signal there is. That makes the wait for this the whole
+        // detection, and it has to be a command that cannot be slow for any other reason.
+        assertTrue(Termux.HANDSHAKE.startsWith("echo "))
+        assertTrue(Termux.HANDSHAKE.contains(Termux.HANDSHAKE_REPLY))
     }
 }

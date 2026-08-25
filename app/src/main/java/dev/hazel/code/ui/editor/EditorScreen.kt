@@ -87,6 +87,15 @@ import dev.hazel.code.ui.theme.TextMid
 import kotlinx.coroutines.launch
 import java.io.File
 
+/**
+ * How wide each control in the editor bar is.
+ *
+ * Down from the 44 a lone icon would take. The bar carries seven of them beside a
+ * filename now, and at 44 apiece the name was down to a few characters before its
+ * ellipsis.
+ */
+private val BAR_ICON = 40.dp
+
 @Composable
 fun EditorScreen(
     vm: EditorViewModel,
@@ -122,7 +131,8 @@ fun EditorScreen(
      */
     fun withRunner(needs: Runtime?, then: () -> Unit) {
         scope.launch {
-            if (terminal.readiness() !is Readiness.Ready) {
+            val dir = file.parent ?: file.absolutePath
+            if (terminal.preflight(dir) !is Readiness.Ready) {
                 setupOpen = true
                 return@launch
             }
@@ -210,6 +220,7 @@ fun EditorScreen(
                 canUndo = vm.canUndo,
                 canRedo = vm.canRedo,
                 onBack = { leave() },
+                onTitle = { infoOpen = true },
                 onTogglePreview = { vm.switchMode(if (editing) ViewMode.PREVIEW else ViewMode.EDIT) },
                 onUndo = { vm.undo() },
                 onRedo = { vm.redo() },
@@ -241,6 +252,11 @@ fun EditorScreen(
                         onInfo = { infoOpen = true; menuOpen = false },
                         onSetup = if (setup.supported) {
                             { setupOpen = true; menuOpen = false }
+                        } else {
+                            null
+                        },
+                        onRuntimes = if (setup.supported) {
+                            { runtimesOpen = true; menuOpen = false }
                         } else {
                             null
                         },
@@ -317,11 +333,7 @@ fun EditorScreen(
     TerminalSheet(terminal)
 
     if (setupOpen) {
-        RunnerSetupDialog(
-            vm = setup,
-            onDismiss = { setupOpen = false },
-            onContinue = { setupOpen = false; runtimesOpen = true },
-        )
+        RunnerSetupDialog(vm = setup, onDismiss = { setupOpen = false })
     }
 
     if (runtimesOpen) {
@@ -329,23 +341,14 @@ fun EditorScreen(
     }
 
     if (infoOpen) {
-        ConfirmDialog(
-            title = file.name,
-            body = buildString {
-                appendLine(file.absolutePath)
-                appendLine()
-                appendLine("Size      ${Fmt.size(file.length())}")
-                appendLine("Modified  ${Fmt.date(file.lastModified())}")
-                appendLine("Type      ${vm.language.label}")
-                appendLine("Lines     ${vm.value.text.count { it == '\n' } + 1}")
-                append("Characters ${vm.value.text.length}")
-            },
-            confirmLabel = "Copy path",
+        FileInfoSheet(
+            file = file,
+            language = vm.language.label,
+            lines = vm.value.text.count { it == '\n' } + 1,
+            characters = vm.value.text.length,
+            onCopyPath = { copyToClipboard(file.absolutePath) },
             onDismiss = { infoOpen = false },
-        ) {
-            copyToClipboard(file.absolutePath)
-            infoOpen = false
-        }
+        )
     }
 }
 
@@ -398,6 +401,7 @@ private fun EditorBar(
     showRun: Boolean,
     running: Boolean,
     onBack: () -> Unit,
+    onTitle: () -> Unit,
     onTogglePreview: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
@@ -411,12 +415,21 @@ private fun EditorBar(
         Modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 6.dp),
+            .padding(start = 2.dp, end = 2.dp, top = 8.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BarIcon(Ico.Back, "Back", onClick = onBack)
 
-        Column(Modifier.weight(1f).padding(start = 6.dp)) {
+        // The name is the handle for everything about the file, so it opens the sheet that
+        // says everything about the file. A path is the thing people most often need out
+        // of an editor and least often have anywhere to read.
+        Column(
+            Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(Radii.sm))
+                .clickable(onClick = onTitle)
+                .padding(start = 6.dp, top = 2.dp, bottom = 2.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     name,
@@ -486,7 +499,7 @@ private fun EditorBar(
             )
         }
 
-        Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(BAR_ICON), contentAlignment = Alignment.Center) {
             AnimatedContent(
                 targetState = saving,
                 transitionSpec = { fadeIn(Motion.snappy()) togetherWith fadeOut(Motion.snappy()) },
@@ -520,8 +533,9 @@ private fun EditorMenu(
     onDismiss: () -> Unit,
     onCopyAll: () -> Unit,
     onInfo: () -> Unit,
-    /** Null in a build that cannot run code, which is how the row stays out of it. */
+    /** Both null in a build that cannot run code, which is how the rows stay out of it. */
     onSetup: (() -> Unit)?,
+    onRuntimes: (() -> Unit)?,
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -564,6 +578,7 @@ private fun EditorMenu(
         MenuRow(Ico.Copy, "Copy all", onClick = onCopyAll)
         MenuRow(Ico.Info, "File info", onClick = onInfo)
         onSetup?.let { MenuRow(Ico.Wrench, "Set up terminal", onClick = it) }
+        onRuntimes?.let { MenuRow(Ico.Terminal, "Install languages", onClick = it) }
     }
 }
 
@@ -666,17 +681,17 @@ private fun BarIcon(
     val scale by animateFloatAsState(if (pressed) 0.88f else 1f, Motion.snappy(), label = "tap")
     Box(
         Modifier
-            .size(44.dp)
+            .size(BAR_ICON)
             .scale(scale)
             .clip(CircleShape)
             .clickable(
                 interactionSource = interaction,
-                indication = androidx.compose.material3.ripple(bounded = false, radius = 22.dp),
+                indication = androidx.compose.material3.ripple(bounded = false, radius = 20.dp),
                 enabled = enabled,
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, label, Modifier.size(20.dp), tint = tint)
+        Icon(icon, label, Modifier.size(19.dp), tint = tint)
     }
 }

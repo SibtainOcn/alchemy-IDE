@@ -37,9 +37,34 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
 
     private val requestIds = AtomicInteger(0)
 
+    /**
+     * The last cheap check and when it was taken.
+     *
+     * The package manager is a round trip to another process, and asking it again before
+     * every command puts that delay in front of every `ls`. Nothing it reports can change
+     * without the user leaving this app, so a couple of seconds of memory is safe and is
+     * the difference between a terminal that feels immediate and one that does not.
+     */
+    private var cached: Readiness? = null
+    private var cachedAt = 0L
+
     override val supported: Boolean get() = true
 
-    override suspend fun readiness(): Readiness = withContext(Dispatchers.IO) {
+    override suspend fun readiness(): Readiness {
+        val now = System.currentTimeMillis()
+        cached?.let { if (now - cachedAt < CACHE_MS) return it }
+        return check().also {
+            cached = it
+            cachedAt = now
+        }
+    }
+
+    /** Throws the remembered answer away, after something that could have changed it. */
+    fun invalidate() {
+        cached = null
+    }
+
+    private suspend fun check(): Readiness = withContext(Dispatchers.IO) {
         val info = packageInfo()
         Termux.readinessOf(
             installed = info != null,
@@ -52,9 +77,35 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
         )
     }
 
+    override suspend fun verify(): Readiness {
+        invalidate()
+        val basics = readiness()
+        if (basics !is Readiness.Ready) return basics
+
+        // Termux answers a refusal with a notification and never calls back, so there is
+        // nothing to read: only the silence says so. This is also what wakes Termux, since
+        // a background command starts its service whether or not the app was running.
+        val handshake = send(
+            RunRequest(
+                command = Termux.HANDSHAKE,
+                workingDir = Termux.HOME,
+                timeoutMs = HANDSHAKE_TIMEOUT_MS,
+            )
+        )
+        return if (handshake.stdout.contains(Termux.HANDSHAKE_REPLY)) {
+            Readiness.Ready
+        } else {
+            Readiness.RunnerNotAnswering
+        }
+    }
+
     override suspend fun run(request: RunRequest): RunResult {
         if (readiness() !is Readiness.Ready) return RunResult(failure = RunFailure.NotReady)
+        return send(request)
+    }
 
+    /** Sends a command without asking again whether it is worth sending. */
+    private suspend fun send(request: RunRequest): RunResult {
         // A distinct action per request. Two runs in flight would otherwise deliver to
         // each other's receiver, and the second result would be attributed to the first.
         val action = "${context.packageName}.TERMUX_RESULT.${requestIds.incrementAndGet()}"
@@ -71,6 +122,17 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
         context.packageManager.getLaunchIntentForPackage(Termux.PACKAGE)
 
     override val homeDirectory: String get() = Termux.HOME
+
+    override suspend fun canReach(path: String): Boolean {
+        val result = run(
+            RunRequest(
+                command = "test -d ${ShellQuote.single(path)} && echo reachable",
+                workingDir = Termux.HOME,
+                timeoutMs = PROBE_TIMEOUT_MS,
+            )
+        )
+        return result.stdout.contains("reachable")
+    }
 
     override suspend fun isInstalled(runtime: Runtime): Boolean {
         val result = run(
@@ -155,7 +217,7 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
                 pendingIntentFlags(),
             )
 
-            runCatching { send(request, callback) }.onFailure { error ->
+            runCatching { dispatch(request, callback) }.onFailure { error ->
                 if (registered) unregister(receiver) { registered = false }
                 if (continuation.isActive) {
                     continuation.resume(
@@ -168,7 +230,7 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
             }
         }
 
-    private fun send(request: RunRequest, callback: PendingIntent) {
+    private fun dispatch(request: RunRequest, callback: PendingIntent) {
         val intent = Intent().apply {
             setClassName(Termux.PACKAGE, Termux.RUN_COMMAND_SERVICE)
             action = Termux.ACTION_RUN_COMMAND
@@ -268,6 +330,17 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
     private companion object {
         /** A probe is one process and no network; anything slower has gone wrong. */
         const val PROBE_TIMEOUT_MS = 15_000L
+
+        /**
+         * How long to wait for `echo` before concluding nobody is listening.
+         *
+         * Short on purpose. A working Termux answers this in well under a second, and
+         * this wait is spent in front of the user with a terminal opening.
+         */
+        const val HANDSHAKE_TIMEOUT_MS = 7_000L
+
+        /** How long a package-manager answer is trusted for. */
+        const val CACHE_MS = 3_000L
 
         /**
          * Long, because this is a download over whatever connection the phone has, and
