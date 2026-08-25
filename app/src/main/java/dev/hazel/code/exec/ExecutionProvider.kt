@@ -91,7 +91,18 @@ interface ExecutionProvider {
      * A failure does not stop the ones after it, because one language failing is no
      * reason to deny somebody the other two.
      */
-    suspend fun install(runtimes: List<Runtime>, onState: (Runtime, InstallState) -> Unit)
+    suspend fun install(
+        runtimes: List<Runtime>,
+        onState: (Runtime, InstallState) -> Unit,
+        /**
+         * Everything the package manager printed, as it finishes with each runtime.
+         *
+         * Kept rather than summarised, because a failed install is a wall of apt output
+         * whose one useful line is somewhere in the middle, and guessing which line that
+         * is has already been wrong once.
+         */
+        onOutput: (Runtime, RunResult) -> Unit,
+    )
 }
 
 /** One command to run, and where to run it. */

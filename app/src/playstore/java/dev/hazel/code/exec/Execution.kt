@@ -37,7 +37,11 @@ object NoExecutionProvider : ExecutionProvider {
 
     override suspend fun isInstalled(runtime: Runtime): Boolean = false
 
-    override suspend fun install(runtimes: List<Runtime>, onState: (Runtime, InstallState) -> Unit) {
+    override suspend fun install(
+        runtimes: List<Runtime>,
+        onState: (Runtime, InstallState) -> Unit,
+        onOutput: (Runtime, RunResult) -> Unit,
+    ) {
         runtimes.forEach { onState(it, InstallState.Failed("This build cannot install runtimes")) }
     }
 }

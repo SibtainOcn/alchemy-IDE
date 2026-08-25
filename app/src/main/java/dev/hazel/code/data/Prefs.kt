@@ -48,6 +48,16 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("line_numbers", true)
         set(v) = sp.edit { putBoolean("line_numbers", v) }
 
+    /** Text size in the terminal sheet, kept apart from the editor's own. */
+    var terminalFontSp: Int
+        get() = sp.getInt("terminal_font_sp", 12)
+        set(v) = sp.edit { putInt("terminal_font_sp", v) }
+
+    /** Whether each command reports how long it took. */
+    var terminalTimings: Boolean
+        get() = sp.getBoolean("terminal_timings", true)
+        set(v) = sp.edit { putBoolean("terminal_timings", v) }
+
     /**
      * Whether the runner setup has been offered once already.
      *

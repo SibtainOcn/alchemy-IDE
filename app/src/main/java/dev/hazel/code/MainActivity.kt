@@ -180,7 +180,12 @@ private fun HazelApp(startFile: File?) {
                 // mid-transition.
                 val path = remember { openPath }
                 if (path != null) {
-                    EditorScreen(vm = vm, file = File(path), onClose = { openPath = null })
+                    EditorScreen(
+                        vm = vm,
+                        file = File(path),
+                        onClose = { openPath = null },
+                        onOpenFile = { openPath = it.absolutePath },
+                    )
                 }
             }
         }

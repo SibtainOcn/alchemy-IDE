@@ -16,8 +16,16 @@ sealed interface ConsoleLine {
 
     data class Error(val text: String) : ConsoleLine
 
-    /** How a command ended, or where the session is. Dimmer than the rest. */
+    /** Where the session is, or something worth saying about the output. */
     data class Note(val text: String) : ConsoleLine
+
+    /**
+     * How long a command took, and what it exited with.
+     *
+     * Separate from [Note] only so it can be turned off. Useful while you are waiting on
+     * something, noise once you are reading the output of something that works.
+     */
+    data class Timing(val text: String) : ConsoleLine
 }
 
 /**

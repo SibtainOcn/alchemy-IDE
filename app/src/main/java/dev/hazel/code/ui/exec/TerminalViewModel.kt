@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dev.hazel.code.data.CommandHistory
+import dev.hazel.code.data.Prefs
 import dev.hazel.code.exec.Console
 import dev.hazel.code.exec.ConsoleLine
 import dev.hazel.code.exec.Execution
@@ -15,8 +17,10 @@ import dev.hazel.code.exec.RunFailure
 import dev.hazel.code.exec.RunRequest
 import dev.hazel.code.exec.Runtime
 import dev.hazel.code.exec.ShellQuote
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -32,6 +36,8 @@ import java.io.File
 class TerminalViewModel(app: Application) : AndroidViewModel(app) {
 
     private val provider: ExecutionProvider = Execution.provider(app)
+    private val prefs = Prefs(app)
+    private val stored = CommandHistory(File(app.filesDir, "command-history.txt"))
     private var job: Job? = null
 
     val supported: Boolean get() = provider.supported
@@ -52,6 +58,91 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
     /** True while the channel is being checked, before the sheet is worth opening. */
     var checking by mutableStateOf(false)
         private set
+
+    var fontSizeSp by mutableStateOf(prefs.terminalFontSp)
+        private set
+
+    /** Whether each command reports how long it took. */
+    var showTimings by mutableStateOf(prefs.terminalTimings)
+        private set
+
+    fun setFontSize(sp: Int) {
+        fontSizeSp = sp.coerceIn(8, 22)
+        prefs.terminalFontSp = fontSizeSp
+    }
+
+    fun toggleTimings() {
+        showTimings = !showTimings
+        prefs.terminalTimings = showTimings
+    }
+
+    /**
+     * Commands typed this session, oldest first, for walking back through.
+     *
+     * Only what was typed at the prompt. A file run from the Run button is not something
+     * anyone wants to find in their history, and repeating the same command twice in a
+     * row leaves one entry rather than two.
+     */
+    private val history = stored.load().toMutableList()
+
+    /** Where the walk has got to, or -1 when not walking. */
+    private var recallAt = -1
+
+    val hasHistory: Boolean get() = history.isNotEmpty()
+
+    /**
+     * The command before the one recall last offered, or the most recent to begin with.
+     *
+     * Written into the prompt rather than run, so it can be edited first. Stops at the
+     * oldest rather than wrapping round to the newest, because a list that loops gives no
+     * sign that you have reached the end of it.
+     */
+    fun recallPrevious(): String? {
+        if (history.isEmpty()) return null
+        recallAt = if (recallAt < 0) history.lastIndex else (recallAt - 1).coerceAtLeast(0)
+        return history[recallAt]
+    }
+
+    /**
+     * The saved history, as a file to open.
+     *
+     * Shown in the editor rather than printed into the scrollback: it is a text file, this
+     * is a text editor, and everything the editor already does with a file, from scrolling
+     * to selecting to searching, is what someone looking at their own history wants.
+     */
+    fun historyFile(): File = stored.ensureExists()
+
+    /** Forgets everything typed, on disk and in the walk-back. */
+    fun clearHistory() {
+        history.clear()
+        recallAt = -1
+        viewModelScope.launch { withContext(Dispatchers.IO) { stored.clear() } }
+        append(ConsoleLine.Note("command history cleared"))
+    }
+
+    /** Everything on screen, as text, for copying a whole session out at once. */
+    fun transcript(): String = lines.joinToString("\n") { line ->
+        when (line) {
+            is ConsoleLine.Typed -> "$ ${line.command}"
+            is ConsoleLine.Output -> line.text
+            is ConsoleLine.Error -> line.text
+            is ConsoleLine.Note -> line.text
+            is ConsoleLine.Timing -> line.text
+        }
+    }
+
+    /**
+     * Shows a log produced somewhere else, such as an install.
+     *
+     * Appended to the same scrollback rather than shown in a place of its own: the output
+     * of `pkg install` is terminal output, and the terminal is where someone will look
+     * for it again afterwards.
+     */
+    fun showLog(log: List<ConsoleLine>) {
+        if (log.isEmpty()) return
+        lines = (lines + log).takeLast(MAX_LINES)
+        open = true
+    }
 
     /**
      * Opens the sheet, pointing at [dir].
@@ -115,6 +206,12 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
     fun submit(input: String) {
         val command = input.trim()
         if (command.isEmpty() || running) return
+
+        if (history.lastOrNull() != command) history += command
+        recallAt = -1
+        // Written on its own thread: the prompt should not wait on a file to accept a
+        // command, and losing the last line of history to a crash costs nothing.
+        viewModelScope.launch { withContext(Dispatchers.IO) { stored.add(command) } }
         append(ConsoleLine.Typed(command))
 
         val cd = Console.cdTarget(command)
@@ -197,7 +294,7 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
             reportFailure(result, fallback = "could not run")
         } else {
             append(
-                ConsoleLine.Note(
+                ConsoleLine.Timing(
                     Console.summarise(result.exitCode, System.currentTimeMillis() - startedAt)
                 )
             )

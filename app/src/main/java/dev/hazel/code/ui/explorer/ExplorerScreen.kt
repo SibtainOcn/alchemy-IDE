@@ -94,6 +94,8 @@ import dev.hazel.code.ui.common.SheetAction
 import dev.hazel.code.ui.exec.RunnerSetupDialog
 import dev.hazel.code.ui.exec.RuntimePickerDialog
 import dev.hazel.code.ui.exec.SetupViewModel
+import dev.hazel.code.ui.exec.TerminalSheet
+import dev.hazel.code.ui.exec.TerminalViewModel
 import dev.hazel.code.ui.theme.Hairline
 import dev.hazel.code.ui.theme.InkRaised
 import dev.hazel.code.ui.theme.Radii
@@ -125,6 +127,7 @@ fun ExplorerScreen(
     // Setting the terminal up has nothing to do with any one file, so it is reachable
     // from here rather than only from inside the editor.
     val setup: SetupViewModel = viewModel()
+    val terminal: TerminalViewModel = viewModel()
 
     // One scroll position per folder, so backing out of a directory lands you where you
     // left rather than at the top - the thing every file manager gets judged on. Bounded
@@ -138,11 +141,17 @@ fun ExplorerScreen(
         }
     }
 
+    TerminalSheet(terminal, onOpenFile = onOpenFile)
+
     if (setupOpen) {
         RunnerSetupDialog(vm = setup, onDismiss = { setupOpen = false })
     }
     if (runtimesOpen) {
-        RuntimePickerDialog(vm = setup, onDismiss = { runtimesOpen = false })
+        RuntimePickerDialog(
+            vm = setup,
+            onDismiss = { runtimesOpen = false },
+            onShowLogs = { runtimesOpen = false; terminal.showLog(setup.log) },
+        )
     }
 
     // Swallowing back at the root would trap the user in the app.
