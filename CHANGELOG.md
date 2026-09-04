@@ -31,6 +31,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - **The filename in the editor bar sits on a plate.** It was always the way into
   something, and nothing about bare title text said so.
 
+- **CI debug APKs are dropped after a day**, down from a fortnight. One is only ever
+  wanted on the day of the push that produced it, and the next push rebuilds it. Release
+  APKs are untouched by this: they go out as GitHub Release assets, which are kept for as
+  long as the release is.
+
 ### Added
 - **Cut, copy and paste, at the filesystem level.** Long-press any file or folder and it
   can be picked up. A strip appears above the list saying what is being carried, with an X
