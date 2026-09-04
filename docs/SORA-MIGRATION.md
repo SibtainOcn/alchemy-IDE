@@ -239,6 +239,61 @@ pins, and the editor's file tree sheet.
   text action popup.
 - An undo implementation that thousands of people have already found the bugs in.
 
+## Step 3, as designed
+
+Not yet built. Recorded here because the shape was worked out against the real API and
+should not have to be re-derived.
+
+### One buffer per tab replaces two stores
+
+A sora `Content` carries its own `UndoManager`, and `setText(content, reuseContentObject =
+true)` hands the same object back to the editor. So a tab that keeps its `Content` keeps
+its text *and* its history for free, and `drafts` (unsaved buffers) and `UndoStore` (undo
+per file) collapse into one map of path to `Content`.
+
+Retention rules, carried over unchanged because they were right:
+
+- Bounded by **retained characters**, not by a count of files. A tab costs nothing until it
+  holds work that is not on disk.
+- Evict least recently *shown*, never least recently opened.
+- **Never evict a buffer holding unsaved work**, even if that means exceeding a limit.
+- On reopening a path: a dirty retained buffer wins over disk; a clean one is kept if the
+  file on disk still matches, and replaced if it does not, which is what picks up an edit
+  made outside the app.
+
+`UndoHistory.kt`, `UndoStore.kt`, `UndoHistoryTest.kt` and `UndoStoreTest.kt` are deleted
+by this — about 31 KB of code and tests that sora already provides.
+
+### `dirty`, `canUndo`, `canRedo` recompute on one signal
+
+`ContentChangeEvent` fires for typing, undo and redo alike. One handler bumps a revision
+counter and recomputes all three. `dirty` uses the length guard described above, so it is
+O(1) except when a change lands the buffer back on the saved length — which is exactly the
+case that has to be answered exactly.
+
+### Steps 3 and 4 are one piece of work
+
+They were listed apart and cannot be done apart. `SmartEdit` has fifteen public operations
+and every one takes and returns a `TextFieldValue`; `KeyOutcome.Edit` is literally
+`(TextFieldValue) -> TextFieldValue`. The view model cannot stop holding a `TextFieldValue`
+until those are rewritten against `Content` and `Cursor`, so the build cannot be green
+between the two. Treat them as one change.
+
+### Open question: testing anything written against `Content`
+
+`ContentLine` imports `android.text.GetChars` and `UndoManager` imports `android.os.Parcel`,
+so `Content` cannot be constructed in a plain JVM unit test. The ported `SmartEdit`
+operations are exactly the kind of index arithmetic that needs tests — `SmartEditTest` is
+what currently pins them — so this has to be settled before the port, not after:
+
+1. **Add Robolectric** to the unit test source set. sora tests itself this way. Costs a
+   test dependency and slower tests; keeps the operations covered.
+2. **Keep the operations pure** by writing them against `CharSequence` and a caret offset,
+   with a thin `Content` adapter. Testable on plain JVM, but a second representation to
+   keep honest.
+3. **Cover them with instrumented tests instead.** Real device, no new dependency, much
+   slower to run and not part of the current CI.
+
 ## To verify on device at the end
 
 Not defects, but the places where the two models differ enough that reading the code will
