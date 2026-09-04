@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -113,14 +114,15 @@ private fun AlchemyApp(startFile: File?) {
 
     // What the editor is actually holding.
     //
-    // It trails openPath rather than being read from it, for two reasons that pull in
-    // opposite directions. openPath goes null the moment the editor starts closing, and
-    // the exit animation still needs a file to draw; but it also changes while the editor
-    // stays on screen, when a file is picked from the tree or a tab, and that has to
-    // arrive. Keeping the last non-null value satisfies both, which reading openPath
-    // directly or remembering it once does not.
-    var editingPath by rememberSaveable { mutableStateOf(startFile?.absolutePath) }
-    LaunchedEffect(openPath) { openPath?.let { editingPath = it } }
+    // openPath goes null the moment the editor starts closing and the exit animation
+    // still needs a file to draw, so the last one opened is kept to fall back on. It is a
+    // fallback rather than the source: when this trailed openPath through an effect
+    // instead, re-entering the editor composed the file it had *last* time for one frame
+    // before the new one arrived, and on a long file that frame is a whole document laid
+    // out and thrown away.
+    var lastOpenPath by rememberSaveable { mutableStateOf(startFile?.absolutePath) }
+    val editingPath = openPath ?: lastOpenPath
+    SideEffect { openPath?.let { lastOpenPath = it } }
 
     // Access is granted on a Settings screen outside the app, so the only reliable moment
     // to re-check is when we come back to the foreground.

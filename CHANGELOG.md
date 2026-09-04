@@ -5,6 +5,50 @@ the name Hazel IDE.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-09-05
+
+### Fixed
+- **A long file no longer freezes the app when it is opened or scrolled.** The line-number
+  gutter drew every line in the file on every frame, not the forty on screen, and measured
+  the numbers it had no room to cache while it was drawing them. On a two thousand line
+  file that was a single frame costing six seconds, with the app entirely unresponsive
+  inside it; the device's own frame log recorded 6114ms, 4723ms and 3178ms while opening
+  a few Python files in turn. The gutter now draws the rows the viewport can show, and
+  finds their numbers by halving an index of the line starts rather than by counting from
+  the top of the file. The same files now cost 505ms at worst, and the system's severe
+  jank detector no longer fires at all.
+- **The file tree no longer shakes when it is dragged to the top.** The sheet's contents
+  were laid out at 92% of the screen, which put its expanded position a sliver below the
+  top edge rather than on it. A drag that ended near there left the sheet and the tree
+  inside it each trying to consume the same last few pixels, one undoing the other every
+  frame. The contents are full height now, so the drag lands exactly on the sheet's own
+  anchor. It still opens half way, which is measured from the sheet's height either way.
+- **Re-entering the editor no longer draws the file you had last time first.** The screen
+  followed the open file through an effect, which runs after the frame that opened it, so
+  a file picked after backing out to the browser arrived one frame late and the previous
+  one was composed and thrown away in the meantime. On a long file that discarded frame is
+  a whole document laid out for nothing, and it was most of the cost of opening anything
+  after walking through a few folders.
+
+### Changed
+- **Colouring a long file happens off the main thread.** Past about twenty thousand
+  characters the scan is no longer run in the middle of composition on every keystroke;
+  it runs on a background thread once typing pauses, and the previous colouring stays on
+  screen until it lands. Colour is the part of an editor that can afford to be a frame
+  late. The character just typed is not, and it was waiting behind a scan of the whole
+  file - thirteen milliseconds of one on a desktop, and a phone is not a desktop.
+- **Code is broken at the edge of the line and nowhere else.** The text stack was using
+  the high-quality line breaker, which balances and hyphenates. Neither means anything in
+  a monospace file, and breaking lines is the single most expensive part of laying a long
+  one out.
+- **The strip carries twenty files rather than twelve, and drops the least recently
+  looked at rather than the oldest.** A tab is a path and a name, so a longer strip costs
+  nothing; what costs memory is a file's unsaved text, and that is now what the limit is
+  actually written against - roughly eight megabytes of it across everything not on
+  screen. A tab holding work that is not on disk is never dropped to honour either limit,
+  because that work is not the app's to throw away. Reaching the ceiling now needs several
+  large files edited and left unsaved at once, rather than twelve files merely opened.
+
 ## [1.1.2] - 2026-09-04
 
 ### Fixed
