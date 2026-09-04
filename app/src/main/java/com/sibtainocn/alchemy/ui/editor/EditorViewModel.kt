@@ -100,6 +100,19 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     private class Draft(val value: TextFieldValue, val savedText: String)
 
+    /**
+     * Open paths in the order they were last shown, least recent first.
+     *
+     * Separate from [tabs], which stays in the order files were opened: a strip that
+     * reordered itself every time you looked at something would move the tab you were
+     * aiming for out from under your finger. Recency decides what to drop, not where to
+     * draw it.
+     */
+    private val visits = LinkedHashSet<String>()
+
+    /** Unsaved characters held for files that are not on screen. */
+    private val parkedChars: Int get() = drafts.values.sumOf { it.value.text.length }
+
     var canUndo by mutableStateOf(false)
         private set
     var canRedo by mutableStateOf(false)
@@ -174,6 +187,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         if (index < 0) return file
         drafts.remove(target.absolutePath)
         histories.forget(target.absolutePath)
+        visits.remove(target.absolutePath)
         val remaining = tabs.filterIndexed { i, _ -> i != index }
         tabs = remaining
         if (file?.absolutePath != target.absolutePath) return file
@@ -189,19 +203,34 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun rememberTab(target: File) {
-        if (tabs.any { it.absolutePath == target.absolutePath }) return
-        val grown = tabs + target
-        if (grown.size <= MAX_TABS) {
-            tabs = grown
-            return
+        val path = target.absolutePath
+        // Re-insert either way: opening a file again is what makes it recent, whether or
+        // not the strip already lists it.
+        visits.remove(path)
+        visits.add(path)
+        if (tabs.none { it.absolutePath == path }) tabs = tabs + target
+        evictTabs(keep = path)
+    }
+
+    /**
+     * Drops tabs until the strip is a sensible length and what is parked fits the budget.
+     *
+     * Only clean tabs are ever dropped, least recently looked at first. A tab holding
+     * unsaved work is not the app's to throw away, so if every candidate is dirty the
+     * limits are simply exceeded rather than someone's afternoon being deleted to honour
+     * them. Both ceilings are about the same thing from different directions: the count
+     * is what a strip stays usable at on a phone, the character budget is what the heap
+     * can carry, and a file may be up to [FileStore.EDIT_LIMIT_BYTES] of it.
+     */
+    private fun evictTabs(keep: String) {
+        while (tabs.size > MAX_TABS || parkedChars > MAX_PARKED_CHARS) {
+            val victim = visits.firstOrNull { it != keep && it !in drafts && it != file?.absolutePath }
+                ?: return
+            visits.remove(victim)
+            drafts.remove(victim)
+            histories.forget(victim)
+            tabs = tabs.filterNot { it.absolutePath == victim }
         }
-        // Over the ceiling: drop the oldest tab that is neither being opened now nor
-        // holding unsaved work. If every one of them is spoken for, the strip is allowed
-        // to be one longer rather than throwing away something someone still wants.
-        val victim = grown.firstOrNull {
-            it.absolutePath != target.absolutePath && it.absolutePath !in drafts
-        }
-        tabs = if (victim == null) grown else grown - victim
     }
 
     fun onValueChange(next: TextFieldValue) {
@@ -311,11 +340,21 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         /**
          * How many files the strip will carry.
          *
-         * Not a limit anyone should reach by working normally. It exists because each
-         * unsaved tab holds a whole file in memory, and a session that opened two hundred
-         * files should not be carrying all of them.
+         * A tab is a path and a name, so the strip itself costs nothing worth counting;
+         * this is where a row of them stops being something you can aim at on a phone.
+         * What actually has to be bounded is the memory behind them, and that is
+         * [MAX_PARKED_CHARS] rather than a count of files.
          */
-        const val MAX_TABS = 12
+        const val MAX_TABS = 20
+
+        /**
+         * Unsaved characters held for files that are not on screen.
+         *
+         * Roughly 8 MB of UTF-16, which is the real ceiling on the strip: a tab costs
+         * nothing until it holds work that is not on disk, and then it costs the whole
+         * file. Reaching this needs several large files edited and left unsaved at once.
+         */
+        const val MAX_PARKED_CHARS = 4_000_000
 
         const val MIN_PREVIEW_ZOOM = 60
         const val MAX_PREVIEW_ZOOM = 250

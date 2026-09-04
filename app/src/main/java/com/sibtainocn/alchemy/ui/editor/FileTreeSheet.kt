@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -105,16 +106,22 @@ fun FileTreeSheet(
         loading = false
     }
 
-    // Flattened on every pass rather than cached: it is a walk over what is already in
-    // memory, and the alternative is a second structure that can disagree with the first.
-    val rows = buildList {
-        fun walk(dir: File, depth: Int) {
-            children[dir.absolutePath]?.forEach { entry ->
-                add(TreeRow(entry, depth))
-                if (entry.isDir && entry.file.absolutePath in expanded) walk(entry.file, depth + 1)
+    // Flattened from what is already in memory rather than kept as a second structure
+    // that can disagree with the first, but derived rather than rebuilt: a fresh list on
+    // every pass handed the lazy column a new item provider each time anything on the
+    // sheet recomposed, which is work in the middle of a drag.
+    val rows by remember {
+        derivedStateOf {
+            buildList {
+                fun walk(dir: File, depth: Int) {
+                    children[dir.absolutePath]?.forEach { entry ->
+                        add(TreeRow(entry, depth))
+                        if (entry.isDir && entry.file.absolutePath in expanded) walk(entry.file, depth + 1)
+                    }
+                }
+                walk(root, 0)
             }
         }
-        walk(root, 0)
     }
 
     ModalBottomSheet(
@@ -125,8 +132,14 @@ fun FileTreeSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
         containerColor = MaterialTheme.colorScheme.background,
     ) {
-        // Taller than the half it opens at, so there is somewhere for the drag to go.
-        Column(Modifier.fillMaxHeight(0.92f)) {
+        // Full height, so that dragging up lands exactly on the sheet's own expanded
+        // anchor. At 92% the anchor sat a sliver below the top of the screen, and a drag
+        // that ended near it left the sheet and the list inside it each trying to consume
+        // the same last few pixels - which is what shook the sheet up and down once it
+        // reached the top. The half-open position is unaffected: that is measured from
+        // the sheet's height either way, and there is still the whole second half to
+        // drag through.
+        Column(Modifier.fillMaxHeight()) {
             Row(
                 Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
