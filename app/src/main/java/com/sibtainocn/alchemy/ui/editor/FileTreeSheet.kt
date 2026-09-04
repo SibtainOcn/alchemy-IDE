@@ -119,10 +119,14 @@ fun FileTreeSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        // Opens half way and can be dragged the rest of the way up. A tree is something
+        // you glance at to find one file, and a sheet that takes the whole screen to do
+        // that hides the file you came from while you look for the next one.
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
         containerColor = MaterialTheme.colorScheme.background,
     ) {
-        Column(Modifier.fillMaxHeight(0.86f)) {
+        // Taller than the half it opens at, so there is somewhere for the drag to go.
+        Column(Modifier.fillMaxHeight(0.92f)) {
             Row(
                 Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,

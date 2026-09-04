@@ -5,6 +5,34 @@ the name Hazel IDE.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Picking a file from the editor's tree now actually opens it.** The editor captured its
+  file once when the screen was created, so choosing another one from the tree, from a
+  terminal result, or from anywhere else changed the path and nothing else: the old file
+  stayed on screen with no sign that anything had been asked for. The screen now follows
+  the file it is given, while still holding the last one long enough to draw its own
+  closing animation, which is what the original capture was there to solve.
+
+### Added
+- **A row of open files under the editor bar.** Every file opened this session sits there
+  as a name with a cross, scrolling sideways, the current one filled in. Tapping one goes
+  to it, the cross closes it, and closing the file on screen falls to its neighbour.
+  It appears from the second file onwards: with one file open it would be the name from
+  the bar, repeated directly under the bar.
+- **Unsaved edits survive switching files.** A file with unwritten changes keeps its
+  buffer when you move to another tab and hands it back when you return, so a tab is a
+  place your work is rather than a bookmark that discards it. Clean files are re-read from
+  disk instead, which is what picks up a change made to them from outside. Closing a tab
+  with unwritten edits asks first, and a tab holding them shows a dot where its cross
+  would be.
+
+### Changed
+- **The file tree opens half way** rather than filling the screen, and drags the rest of
+  the way up. It is something you glance at to find one file, and taking the whole screen
+  to do that hid the file you came from while you looked for the next one.
+
 ## [1.1.1] — 2026-00 - 04
 
 ### Changed

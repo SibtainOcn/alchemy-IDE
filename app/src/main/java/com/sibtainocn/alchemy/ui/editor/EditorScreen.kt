@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,7 +31,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
@@ -52,6 +57,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -113,6 +119,7 @@ fun EditorScreen(
     var confirmExit by remember { mutableStateOf(false) }
     var infoOpen by remember { mutableStateOf(false) }
     var treeOpen by remember { mutableStateOf(false) }
+    var closingTab by remember { mutableStateOf<File?>(null) }
     var setupOpen by remember { mutableStateOf(false) }
     var runtimesOpen by remember { mutableStateOf(false) }
 
@@ -158,6 +165,15 @@ fun EditorScreen(
 
     fun leave() {
         if (vm.dirty) confirmExit = true else onClose()
+    }
+
+    /** Drops a tab and goes wherever the view model says is left. */
+    fun dropTab(target: File) {
+        val next = vm.closeTab(target)
+        when {
+            next == null -> onClose()
+            next.absolutePath != file.absolutePath -> onOpenFile(next)
+        }
     }
 
     // Text edits go straight to the view model as one undo step; the rest are things only
@@ -270,6 +286,24 @@ fun EditorScreen(
 
             HairlineDivider()
 
+            // One row of what this session has open. It earns its height only once there
+            // is somewhere else to go: with a single file the strip would be the name
+            // from the bar, repeated directly under the bar.
+            if (vm.tabs.size > 1) {
+                TabStrip(
+                    tabs = vm.tabs,
+                    current = file,
+                    unsaved = vm::hasUnsavedWork,
+                    onSelect = { if (it.absolutePath != file.absolutePath) onOpenFile(it) },
+                    onClose = { target ->
+                        // Closing throws the tab's buffer away, so anything unwritten is
+                        // asked about first, whether or not it is the file on screen.
+                        if (vm.hasUnsavedWork(target)) closingTab = target else dropTab(target)
+                    },
+                )
+                HairlineDivider()
+            }
+
             AnimatedContent(
                 targetState = Triple(vm.loading, vm.mode, vm.readOnly && vm.value.text.isEmpty()),
                 transitionSpec = { fadeIn(Motion.standard()) togetherWith fadeOut(Motion.snappy()) },
@@ -334,6 +368,19 @@ fun EditorScreen(
         }
     }
 
+    closingTab?.let { target ->
+        ConfirmDialog(
+            title = "Close without saving?",
+            body = target.name + " has edits that have not been written.",
+            confirmLabel = "Close",
+            danger = true,
+            onDismiss = { closingTab = null },
+        ) {
+            closingTab = null
+            dropTab(target)
+        }
+    }
+
     TerminalSheet(terminal, onOpenFile = onOpenFile)
 
     if (setupOpen) {
@@ -365,6 +412,96 @@ fun EditorScreen(
             onCopyPath = { copyToClipboard(file.absolutePath) },
             onDismiss = { infoOpen = false },
         )
+    }
+}
+
+/**
+ * The open files, as a strip of names under the bar.
+ *
+ * Reduced to the two things a tab is for on a phone: getting back to a file, and getting
+ * rid of one. No glyph, no path, no close-others menu. A file with unwritten edits shows
+ * a dot where its cross would be, which is the one piece of state a tab has to carry and
+ * the one place there is room to put it.
+ */
+@Composable
+private fun TabStrip(
+    tabs: List<File>,
+    current: File,
+    unsaved: (File) -> Boolean,
+    onSelect: (File) -> Unit,
+    onClose: (File) -> Unit,
+) {
+    val scroll = rememberLazyListState()
+
+    // The open file changes from the tree and from closing a tab as well as from a tap in
+    // here, and in those cases it can easily be off the end of the strip.
+    LaunchedEffect(current.absolutePath, tabs.size) {
+        val index = tabs.indexOfFirst { it.absolutePath == current.absolutePath }
+        if (index >= 0) runCatching { scroll.animateScrollToItem(index) }
+    }
+
+    LazyRow(
+        state = scroll,
+        modifier = Modifier.fillMaxWidth().background(InkRaised),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        items(tabs, key = { it.absolutePath }) { tab ->
+            Tab(
+                file = tab,
+                active = tab.absolutePath == current.absolutePath,
+                unsaved = unsaved(tab),
+                onSelect = { onSelect(tab) },
+                onClose = { onClose(tab) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun Tab(
+    file: File,
+    active: Boolean,
+    unsaved: Boolean,
+    onSelect: () -> Unit,
+    onClose: () -> Unit,
+) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(Radii.xs))
+            .background(if (active) InkHigh else Color.Transparent)
+            .clickable(onClick = onSelect)
+            .padding(start = 11.dp, end = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            file.name,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (active) TextHigh else TextMid,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            // Long enough for a real filename, short enough that three tabs still fit on
+            // a phone before anything has to be scrolled to.
+            modifier = Modifier.widthIn(max = 150.dp),
+        )
+        Box(
+            Modifier
+                .padding(start = 3.dp)
+                .size(26.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onClose),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (unsaved) {
+                Box(
+                    Modifier
+                        .size(7.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                )
+            } else {
+                Icon(Ico.Close, "Close " + file.name, Modifier.size(12.dp), tint = TextLow)
+            }
+        }
     }
 }
 

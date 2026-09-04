@@ -80,6 +80,26 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     private var history = UndoHistory()
     private var savedText = ""
 
+    /**
+     * Every file opened this session, oldest first, as the strip under the bar lists them.
+     *
+     * Session-lived like the undo store and for the same reason: it is a record of where
+     * you have been while the app has been open, not a project the app is managing.
+     */
+    var tabs by mutableStateOf(emptyList<File>())
+        private set
+
+    /**
+     * Unsaved buffers belonging to files that are not on screen.
+     *
+     * Without this, tapping another tab would read the new file from disk and the old
+     * file's edits would simply be gone. Only dirty buffers are parked: a clean file is
+     * re-read instead, which is what picks up a change made to it from outside.
+     */
+    private val drafts = mutableMapOf<String, Draft>()
+
+    private class Draft(val value: TextFieldValue, val savedText: String)
+
     var canUndo by mutableStateOf(false)
         private set
     var canRedo by mutableStateOf(false)
@@ -87,7 +107,9 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     fun load(target: File) {
         if (file?.absolutePath == target.absolutePath && !loading) return
+        parkDraft()
         file = target
+        rememberTab(target)
         loading = true
         mode = if (Language.of(target.name) == Language.MARKDOWN) ViewMode.PREVIEW else ViewMode.EDIT
         modifiers = Modifiers()
@@ -107,11 +129,14 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             }
             FileStore.read(target)
                 .onSuccess { text ->
-                    savedText = text
-                    value = TextFieldValue(text)
+                    // A parked draft wins over what is on disk: it is work this session
+                    // did and has not written yet, and reading over it would lose it.
+                    val draft = drafts.remove(target.absolutePath)
+                    savedText = draft?.savedText ?: text
+                    value = draft?.value ?: TextFieldValue(text)
                     // Reopening a file this session picks its history back up, unless the
                     // file has changed since, in which case the store hands back a new one.
-                    history = histories.of(target.absolutePath, text)
+                    history = histories.of(target.absolutePath, value.text)
                     readOnly = target.length() > FileStore.EDIT_LIMIT_BYTES || !target.canWrite()
                     if (readOnly && target.length() > FileStore.EDIT_LIMIT_BYTES) {
                         message = "Large file - opened read-only"
@@ -122,12 +147,61 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                     message = it.message ?: "Could not read this file"
                 }
             syncHistoryFlags()
-            dirty = false
+            dirty = value.text != savedText
             // Same reasoning as the explorer: let the loader own at least a frame or two
             // instead of blinking.
             delay(80)
             loading = false
         }
+    }
+
+    // ---- Tabs ----
+
+    /** True when [target] holds work that is not on disk, whether or not it is on screen. */
+    fun hasUnsavedWork(target: File): Boolean =
+        if (target.absolutePath == file?.absolutePath) dirty && !readOnly
+        else target.absolutePath in drafts
+
+    /**
+     * Closes a tab and says what should be shown instead.
+     *
+     * Returns the file to move to, or null when that was the last one and the editor has
+     * nothing left to hold. Closing throws away the tab's unsaved draft, which is what
+     * closing something means; the screen asks first.
+     */
+    fun closeTab(target: File): File? {
+        val index = tabs.indexOfFirst { it.absolutePath == target.absolutePath }
+        if (index < 0) return file
+        drafts.remove(target.absolutePath)
+        histories.forget(target.absolutePath)
+        val remaining = tabs.filterIndexed { i, _ -> i != index }
+        tabs = remaining
+        if (file?.absolutePath != target.absolutePath) return file
+        // The one on screen went: fall to its left neighbour, or to the new first when it
+        // was already leftmost.
+        return remaining.getOrNull(index - 1) ?: remaining.firstOrNull()
+    }
+
+    private fun parkDraft() {
+        val previous = file?.absolutePath ?: return
+        if (dirty && !readOnly) drafts[previous] = Draft(value, savedText)
+        else drafts.remove(previous)
+    }
+
+    private fun rememberTab(target: File) {
+        if (tabs.any { it.absolutePath == target.absolutePath }) return
+        val grown = tabs + target
+        if (grown.size <= MAX_TABS) {
+            tabs = grown
+            return
+        }
+        // Over the ceiling: drop the oldest tab that is neither being opened now nor
+        // holding unsaved work. If every one of them is spoken for, the strip is allowed
+        // to be one longer rather than throwing away something someone still wants.
+        val victim = grown.firstOrNull {
+            it.absolutePath != target.absolutePath && it.absolutePath !in drafts
+        }
+        tabs = if (victim == null) grown else grown - victim
     }
 
     fun onValueChange(next: TextFieldValue) {
@@ -234,6 +308,15 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun consumeMessage() { message = null }
 
     companion object {
+        /**
+         * How many files the strip will carry.
+         *
+         * Not a limit anyone should reach by working normally. It exists because each
+         * unsaved tab holds a whole file in memory, and a session that opened two hundred
+         * files should not be carrying all of them.
+         */
+        const val MAX_TABS = 12
+
         const val MIN_PREVIEW_ZOOM = 60
         const val MAX_PREVIEW_ZOOM = 250
         const val PREVIEW_ZOOM_STEP = 10

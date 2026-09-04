@@ -111,6 +111,17 @@ private fun AlchemyApp(startFile: File?) {
     var booting by remember { mutableStateOf(true) }
     var openPath by rememberSaveable { mutableStateOf(startFile?.absolutePath) }
 
+    // What the editor is actually holding.
+    //
+    // It trails openPath rather than being read from it, for two reasons that pull in
+    // opposite directions. openPath goes null the moment the editor starts closing, and
+    // the exit animation still needs a file to draw; but it also changes while the editor
+    // stays on screen, when a file is picked from the tree or a tab, and that has to
+    // arrive. Keeping the last non-null value satisfies both, which reading openPath
+    // directly or remembering it once does not.
+    var editingPath by rememberSaveable { mutableStateOf(startFile?.absolutePath) }
+    LaunchedEffect(openPath) { openPath?.let { editingPath = it } }
+
     // Access is granted on a Settings screen outside the app, so the only reliable moment
     // to re-check is when we come back to the foreground.
     DisposableEffect(lifecycleOwner) {
@@ -177,10 +188,7 @@ private fun AlchemyApp(startFile: File?) {
 
             Phase.EDITOR -> {
                 val vm: EditorViewModel = viewModel()
-                // Captured once for this content instance: openPath is already null while
-                // the editor animates out, and reading it live would blank the screen
-                // mid-transition.
-                val path = remember { openPath }
+                val path = editingPath
                 if (path != null) {
                     EditorScreen(
                         vm = vm,
