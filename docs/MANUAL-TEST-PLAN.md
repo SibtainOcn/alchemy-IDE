@@ -139,7 +139,7 @@ reconstructed later.
 |---|---|---|---|
 | 3.17 | Every symbol key | Inserts at the caret, keyboard stays up | |
 | 3.18 | Arrow keys | Caret moves one character / one line | |
-| 3.19 | Home / End | Start and end of the line | |
+| 3.19 | Home / End | Start and end of the line. **Behaviour change:** Home used to toggle between the first word and column zero; sora's `LINE_START` does not toggle. Decide whether that matters | |
 | 3.20 | Tab, no selection, mid-line | Advances to the next 4-column tab stop — not a full line indent | |
 | 3.21 | Tab with lines selected | Indents every touched line, one undo step | |
 | 3.22 | Dedent | Removes up to one indent per line; lines with none are untouched | |

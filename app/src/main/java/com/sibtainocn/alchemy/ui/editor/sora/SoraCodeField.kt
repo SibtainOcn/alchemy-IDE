@@ -40,12 +40,15 @@ fun SoraCodeField(
     readOnly: Boolean,
     onChanged: () -> Unit,
     onCaret: (Caret) -> Unit,
+    /** Handed the view once, so the screen can send it commands the key bar produces. */
+    onReady: (CodeEditor) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // The callbacks are subscribed once, when the view is built, so they must not close
     // over the versions that were current at that moment.
     val changed by rememberUpdatedState(onChanged)
     val caret by rememberUpdatedState(onCaret)
+    val ready by rememberUpdatedState(onReady)
 
     val scheme = remember(palette) { palette.toColorScheme() }
     val editorLanguage = remember(language, autoPair) { AlchemyLanguage(language, autoPair) }
@@ -66,6 +69,7 @@ fun SoraCodeField(
                         )
                     )
                 }
+                ready(this)
             }
         },
         update = { editor ->

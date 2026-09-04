@@ -1,7 +1,5 @@
 package com.sibtainocn.alchemy
 
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.TextFieldValue
 import com.sibtainocn.alchemy.data.Language
 import com.sibtainocn.alchemy.ui.editor.BarKey
 import com.sibtainocn.alchemy.ui.editor.EditorCommand
@@ -29,10 +27,15 @@ class KeyBarModelTest {
     private fun press(id: String, mods: Modifiers = none, lang: Language = Language.PYTHON) =
         KeyBarModel.press(key(id), mods, lang)
 
-    private fun applied(id: String, on: TextFieldValue, mods: Modifiers = none): TextFieldValue {
-        val (outcome, _) = press(id, mods)
-        return (outcome as KeyOutcome.Edit).op(on)
-    }
+    /**
+     * What an edit key does, as the id of the operation it produces.
+     *
+     * The operations themselves now belong to the editor and are covered by
+     * [EditorOpsTest] against a real buffer. What is left for this test is the mapping -
+     * that a key id reaches the right one - so the outcome is inspected rather than run.
+     */
+    private fun isEdit(id: String, mods: Modifiers = none): Boolean =
+        press(id, mods).first is KeyOutcome.Edit
 
     @Test
     fun `ctrl arms and disarms without editing anything`() {
@@ -68,64 +71,41 @@ class KeyBarModelTest {
     }
 
     @Test
-    fun `tab indents`() {
-        val block = TextFieldValue("a\nb", TextRange(0, 3))
-        assertEquals("    a\n    b", applied(KeyBarModel.TAB, block).text)
+    fun `the block keys produce edits`() {
+        // What each edit then does to a buffer is EditorOpsTest's business; that it is an
+        // edit at all, and reaches the right operation, is this one's.
+        listOf(KeyBarModel.TAB, "act.dedent", "act.comment", "act.dup", "act.delline")
+            .forEach { assertTrue("$it should edit", isEdit(it)) }
     }
 
     @Test
-    fun `dedent has its own key now that shift-tab is gone`() {
-        val indented = TextFieldValue("    a\n    b", TextRange(0, 11))
-        assertEquals("a\nb", applied("act.dedent", indented).text)
+    fun `the movement keys produce edits`() {
+        listOf("act.left", "act.right", "act.up", "act.down", "act.home", "act.end")
+            .forEach { assertTrue("$it should edit", isEdit(it)) }
     }
 
     @Test
-    fun `insert keys insert their text verbatim`() {
-        val v = TextFieldValue("", TextRange(0))
-        assertEquals("self.", applied("lang.self", v).text)
-        assertEquals("()", applied("sym.paren", v).text)
-        assertEquals(TextRange(1), applied("sym.paren", v).selection)
+    fun `insert keys carry their text and where the caret should land in it`() {
+        assertEquals("self.", key("lang.self").text)
+        assertEquals("()", key("sym.paren").text)
+        // Between the brackets, which is the whole point of carrying an offset.
+        assertEquals(1, key("sym.paren").caretOffset)
     }
 
     @Test
-    fun `arrows move the caret`() {
-        val v = TextFieldValue("abcdef", TextRange(3))
-        assertEquals(TextRange(4), applied("act.right", v).selection)
-        assertEquals(TextRange(2), applied("act.left", v).selection)
-    }
-
-    @Test
-    fun `vertical movement keeps the column`() {
-        val v = TextFieldValue("hello\nworld", TextRange(3))
-        assertEquals(TextRange(9), applied("act.down", v).selection)
-        val back = TextFieldValue("hello\nworld", TextRange(9))
-        assertEquals(TextRange(3), applied("act.up", back).selection)
-    }
-
-    @Test
-    fun `vertical movement clamps onto a shorter line`() {
-        val v = TextFieldValue("longer line\nab", TextRange(9))
-        assertEquals("Should land at the end of the short line", TextRange(14), applied("act.down", v).selection)
-    }
-
-    @Test
-    fun `home toggles between the first word and column zero`() {
-        val v = TextFieldValue("    indented", TextRange(8))
-        val atWord = applied("act.home", v)
-        assertEquals(TextRange(4), atWord.selection)
-        assertEquals(TextRange(0), applied("act.home", atWord).selection)
+    fun `the clipboard and history keys are commands, not edits`() {
+        listOf("ctl.save", "ctl.undo", "ctl.redo", "ctl.copy", "ctl.cut", "ctl.paste")
+            .forEach { assertTrue("$it should be a command", press(it).first is KeyOutcome.Command) }
     }
 
     @Test
     fun `every default key produces an outcome`() {
         // Guards against adding a key id to the set and forgetting to wire it up: an
         // unhandled id silently falls through to "insert its own label".
-        val v = TextFieldValue("x = 1\n", TextRange(0))
         Language.entries.forEach { lang ->
             KeyBarModel.defaultKeys(lang).forEach { k ->
                 val (outcome, _) = KeyBarModel.press(k, none, lang)
                 assertNotNull("No outcome for ${k.id}", outcome)
-                if (outcome is KeyOutcome.Edit) assertNotNull(outcome.op(v))
             }
         }
     }

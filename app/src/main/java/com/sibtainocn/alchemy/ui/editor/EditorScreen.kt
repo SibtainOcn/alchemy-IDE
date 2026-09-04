@@ -87,6 +87,9 @@ import com.sibtainocn.alchemy.ui.theme.CodeFont
 import com.sibtainocn.alchemy.ui.theme.InkHigh
 import com.sibtainocn.alchemy.ui.theme.InkRaised
 import com.sibtainocn.alchemy.ui.theme.LocalAccents
+import com.sibtainocn.alchemy.ui.editor.sora.EditorPalette
+import com.sibtainocn.alchemy.ui.editor.sora.SoraCodeField
+import io.github.rosemoe.sora.widget.CodeEditor
 import com.sibtainocn.alchemy.ui.theme.Radii
 import com.sibtainocn.alchemy.ui.theme.TextHigh
 import com.sibtainocn.alchemy.ui.theme.TextLow
@@ -122,6 +125,15 @@ fun EditorScreen(
     var closingTab by remember { mutableStateOf<File?>(null) }
     var setupOpen by remember { mutableStateOf(false) }
     var runtimesOpen by remember { mutableStateOf(false) }
+
+    // The view itself, for the commands the key bar and the bar produce. The buffer lives
+    // on the view model; this is only the thing that knows where the caret is in it.
+    var editor by remember { mutableStateOf<CodeEditor?>(null) }
+
+    // Rendering Markdown means reading the buffer out as one string, which is the one
+    // thing here that costs what the file is long. Held against the revision it was taken
+    // at, so switching to the preview without having typed copies nothing.
+    val preview = remember { PreviewText() }
 
     // Shared with the rest of the app rather than owned by this screen: an install is a
     // long download that must not be abandoned because a dialog closed.
@@ -180,21 +192,20 @@ fun EditorScreen(
     // this screen can reach - the clipboard, the save pipeline, the undo history.
     fun handleKey(outcome: KeyOutcome) {
         when (outcome) {
-            is KeyOutcome.Edit -> vm.apply(outcome.op)
-            is KeyOutcome.Command -> when (outcome.command) {
-                EditorCommand.SAVE -> vm.save()
-                EditorCommand.UNDO -> vm.undo()
-                EditorCommand.REDO -> vm.redo()
-                EditorCommand.COPY -> copyToClipboard(SmartEdit.selectedTextOrLine(vm.value))
-                EditorCommand.CUT -> {
-                    copyToClipboard(SmartEdit.selectedTextOrLine(vm.value))
-                    vm.apply { v ->
-                        if (v.selection.collapsed) SmartEdit.deleteLine(v)
-                        else SmartEdit.deleteSelection(v)
-                    }
-                }
-                EditorCommand.PASTE -> pasteFromClipboard { text ->
-                    vm.apply { SmartEdit.insert(it, text) }
+            is KeyOutcome.Edit -> editor?.let(outcome.op)
+            is KeyOutcome.Command -> {
+                val target = editor
+                when (outcome.command) {
+                    EditorCommand.SAVE -> vm.save()
+                    // Through the view rather than the buffer, so the caret follows the
+                    // change back to where it was made.
+                    EditorCommand.UNDO -> target?.undo() ?: vm.undo()
+                    EditorCommand.REDO -> target?.redo() ?: vm.redo()
+                    // The editor's own clipboard: with nothing selected it takes the
+                    // whole line, which is what these keys have always done.
+                    EditorCommand.COPY -> target?.copyText(true)
+                    EditorCommand.CUT -> target?.cutText()
+                    EditorCommand.PASTE -> target?.pasteText()
                 }
             }
             KeyOutcome.None -> Unit
@@ -224,7 +235,7 @@ fun EditorScreen(
                 subtitle = buildString {
                     append(vm.language.label)
                     append("  ·  ")
-                    append(vm.value.text.count { it == '\n' } + 1)
+                    append(vm.content?.lineCount ?: 1)
                     append(" lines")
                     if (vm.readOnly) append("  ·  read-only")
                 },
@@ -266,7 +277,7 @@ fun EditorScreen(
                         vm = vm,
                         onDismiss = { menuOpen = false },
                         onCopyAll = {
-                            copyToClipboard(vm.value.text)
+                            copyToClipboard(vm.content?.toString().orEmpty())
                             menuOpen = false
                         },
                         onInfo = { infoOpen = true; menuOpen = false },
@@ -305,7 +316,7 @@ fun EditorScreen(
             }
 
             AnimatedContent(
-                targetState = Triple(vm.loading, vm.mode, vm.readOnly && vm.value.text.isEmpty()),
+                targetState = Triple(vm.loading, vm.mode, vm.readOnly && (vm.content?.length ?: 0) == 0),
                 transitionSpec = { fadeIn(Motion.standard()) togetherWith fadeOut(Motion.snappy()) },
                 label = "editor-body",
                 modifier = Modifier.weight(1f),
@@ -317,17 +328,27 @@ fun EditorScreen(
                         vm.message ?: "It is not text, or it is not readable.",
                         Ico.Info,
                     )
-                    mode == ViewMode.PREVIEW ->
-                        MarkdownView(vm.value.text, Modifier.fillMaxSize(), vm.previewZoomPct / 100f)
-                    else -> CodeField(
-                        value = vm.value,
-                        onValueChange = vm::onValueChange,
-                        language = vm.language,
-                        fontSizeSp = vm.fontSizeSp,
-                        wordWrap = vm.wordWrap,
-                        showLineNumbers = vm.lineNumbers,
-                        readOnly = vm.readOnly,
+                    mode == ViewMode.PREVIEW -> MarkdownView(
+                        preview.of(vm.content, vm.revision),
+                        Modifier.fillMaxSize(),
+                        vm.previewZoomPct / 100f,
                     )
+                    else -> vm.content?.let { buffer ->
+                        SoraCodeField(
+                            content = buffer,
+                            language = vm.language,
+                            palette = EditorPalette(),
+                            fontSizeSp = vm.fontSizeSp,
+                            wordWrap = vm.wordWrap,
+                            autoPair = vm.autoPair,
+                            lineNumbers = vm.lineNumbers,
+                            readOnly = vm.readOnly,
+                            onChanged = vm::onContentChanged,
+                            onCaret = vm::onCaret,
+                            onReady = { editor = it },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 }
             }
 
@@ -407,8 +428,8 @@ fun EditorScreen(
         FileInfoSheet(
             file = file,
             language = vm.language.label,
-            lines = vm.value.text.count { it == '\n' } + 1,
-            characters = vm.value.text.length,
+            lines = vm.content?.lineCount ?: 1,
+            characters = vm.content?.length ?: 0,
             onCopyPath = { copyToClipboard(file.absolutePath) },
             onDismiss = { infoOpen = false },
         )
@@ -509,11 +530,11 @@ private fun Tab(
 @Composable
 private fun CaretStatus(vm: EditorViewModel) {
     val accents = LocalAccents.current
-    val text = vm.value.text
-    val caret = vm.value.selection.start
-    val line = remember(text, caret) { SmartEdit.lineNumberAt(text, caret) }
-    val col = remember(text, caret) { SmartEdit.columnAt(text, caret) }
-    val selected = vm.value.selection.length
+    // Reported by the editor as the caret moves, rather than worked out from the buffer.
+    val caret = vm.caret
+    val line = caret.line
+    val col = caret.column
+    val selected = caret.selected
 
     Row(
         Modifier
@@ -856,5 +877,25 @@ private fun BarIcon(
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, label, Modifier.size(19.dp), tint = tint)
+    }
+}
+
+/**
+ * The last string the preview was rendered from, and the revision it came out of.
+ *
+ * Reading a [Content] out as a string copies the whole document, so it is done when the
+ * buffer has actually moved and not when the screen merely recomposed or the preview was
+ * switched back to.
+ */
+private class PreviewText {
+    private var revision = -1
+    private var text = ""
+
+    fun of(content: io.github.rosemoe.sora.text.Content?, at: Int): String {
+        if (at != revision) {
+            text = content?.toString().orEmpty()
+            revision = at
+        }
+        return text
     }
 }
