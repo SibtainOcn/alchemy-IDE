@@ -135,6 +135,55 @@ Everything written for this migration is new Kotlin in `app/`: the `AndroidView`
 the `Highlighter`→analyzer adapter, `AlchemyAccents`→`EditorColorScheme`, and symbol pairs.
 sora's own Java and Kotlin arrive compiled in the artifact and are never touched.
 
+## Decisions taken along the way
+
+### Themes are slot ids, not colours
+
+sora separates *what a run of text is* from *what that looks like*: the analyzer emits a
+colour **slot id**, and the `EditorColorScheme` in force maps slots to colours. Alchemy's
+highlighter is written to that shape in `ui/editor/sora/EditorPalette.kt`.
+
+The consequence worth planning around: **switching themes costs one object swap and no
+re-analysis.** A light theme, or a second highlighting scheme beside Monokai, is a new
+`EditorPalette` instance and nothing else — no branch in the scanner, no invalidation of
+work already done. `AlchemyAccents` is already a data class carrying every syntax colour,
+so it needs no change to serve a second theme.
+
+sora's own slots are reused where they mean the same thing. Alchemy's extra categories
+(number, builtin, decorator, self-reference, punctuation) start at 100, above sora's
+`END_COLOR_ID` of 83, so a future library version cannot collide with them.
+
+Note this covers the *editor* only. The app chrome is still `darkColorScheme` in
+`ui/theme/Theme.kt` and is a separate piece of work.
+
+### `dirty` is tracked so that undoing back to the saved state is clean
+
+The obvious approach — compare the buffer to the saved text on every change — is O(document)
+per keystroke, which is the cost this migration exists to remove. The next idea, mirroring
+sora's undo stack pointer, does not work either: `UndoManager.stackPointer` is private with
+no getter, and `canUndo()`/`canRedo()` do not determine it. Counting `ContentChangeEvent`s
+instead drifts, because sora **merges** consecutive keystrokes into a single undo action,
+so three typed characters can be one stack entry.
+
+What is used instead: the buffer can only equal the saved text if it is the same *length*,
+and length is O(1). So
+
+```
+dirty = content.length != savedLength || content.toString() != savedText
+```
+
+memoised against a change counter, so it is evaluated at most once per edit. Typing almost
+always changes the length, so the second half is normally never reached; it runs when an
+undo brings the buffer back to the saved length, which is exactly the case that has to be
+answered exactly, and costs one comparison to answer.
+
+### The Markdown preview re-reads only when the buffer has moved
+
+The preview cannot read `content.toString()` per recomposition — that is a full copy of the
+document. It holds the text it last rendered along with the change counter it was taken at,
+and re-reads only when switching into preview with a counter that has moved since. Edit
+nothing and switch back and forth, and nothing is copied.
+
 ## What this breaks in Alchemy
 
 The coupling to `TextFieldValue` is six files:
