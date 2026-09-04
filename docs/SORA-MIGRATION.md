@@ -239,6 +239,27 @@ pins, and the editor's file tree sheet.
   text action popup.
 - An undo implementation that thousands of people have already found the bugs in.
 
+## To verify on device at the end
+
+Not defects, but the places where the two models differ enough that reading the code will
+not tell you whether it works. Each needs a real device and a real soft keyboard.
+
+- **The key bar against sora's IME.** `CodeEditor` owns its own scrolling, selection
+  handles and input connection. `KeyBar`'s modifier latches were written against a
+  `TextFieldValue` that Compose owned and could be replaced wholesale between frames; they
+  now sit beside an input connection that is being driven by the keyboard at the same time.
+  Tab, the arrow keys and the modifier latches all need trying against a real IME rather
+  than against the emulator's hardware keyboard.
+- **Selection handles inside a scrolling parent.** The editor is a view inside Compose
+  layout; its handles are drawn in its own window. Dragging one near the edge of the screen
+  is the case to try.
+- **`imePadding` and the key bar together.** The editor scrolls itself, so the previous
+  arrangement - a scrolling text field inside `imePadding` - no longer describes what is
+  happening, and the caret staying visible above the keyboard has to be re-checked.
+- **Read-only files.** `setEditable(false)` should also stop the IME appearing at all.
+- **The frame log, by the same method as the original diagnosis.** Open the same Python
+  files, capture `Quality ... cost`, and compare against 505ms.
+
 ## Order of work
 
 | | |
