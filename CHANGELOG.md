@@ -5,7 +5,7 @@ the name Hazel IDE.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.1] — 2026-00 - 04
 
 ### Changed
 - **The app is now Alchemy.** New name everywhere it is shown, a new mark, and a new
