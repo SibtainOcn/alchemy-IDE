@@ -164,6 +164,8 @@ dependencies {
     implementation(libs.androidx.documentfile)
     implementation(libs.androidx.splashscreen)
 
+    implementation(libs.sora.editor)
+
     debugImplementation(libs.androidx.ui.tooling)
 
     testImplementation(libs.junit)
