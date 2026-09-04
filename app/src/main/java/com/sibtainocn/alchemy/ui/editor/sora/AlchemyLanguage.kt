@@ -1,5 +1,6 @@
 package com.sibtainocn.alchemy.ui.editor.sora
 
+import android.os.Bundle
 import com.sibtainocn.alchemy.data.Language
 import com.sibtainocn.alchemy.syntax.Highlighter
 import com.sibtainocn.alchemy.syntax.TokenKind
@@ -14,6 +15,7 @@ import io.github.rosemoe.sora.lang.styling.Styles
 import io.github.rosemoe.sora.lang.styling.TextStyle
 import io.github.rosemoe.sora.text.CharPosition
 import io.github.rosemoe.sora.text.Content
+import io.github.rosemoe.sora.text.ContentReference
 import io.github.rosemoe.sora.widget.SymbolPairMatch
 
 /**
@@ -31,11 +33,32 @@ class AlchemyLanguage(
 ) : EmptyLanguage() {
 
     private val analyzer = object : SimpleAnalyzeManager<Unit>() {
+
+        /**
+         * The buffer being analysed, kept because the text handed to [analyze] can be
+         * short of it.
+         *
+         * The manager collects the document line by line and abandons the collection the
+         * moment a newer request arrives, then hands over however much it had. The
+         * renderer, meanwhile, asks for whichever line it is about to draw - so styles
+         * built to the length of a truncated collection are an index out of bounds in the
+         * middle of a frame. Which is what a 3 MB file did: 98,849 lines of styles for a
+         * document of 101,521.
+         */
+        private var buffer: ContentReference? = null
+
+        override fun reset(content: ContentReference, extraArguments: Bundle) {
+            buffer = content
+            super.reset(content, extraArguments)
+        }
+
         override fun analyze(text: StringBuilder, delegate: Delegate<Unit>): Styles {
             val source = text.toString()
             val sink = SoraSpanSink(source.length)
             if (!delegate.isCancelled) Highlighter.scan(source, language, sink)
-            return sink.toStyles(source)
+            // Padded to what the buffer actually holds. Spare lines carry the last span
+            // and are never drawn; missing ones take the app down.
+            return sink.toStyles(source, atLeast = buffer?.lineCount ?: 0)
         }
     }
 
@@ -139,7 +162,7 @@ class SoraSpanSink(length: Int) : TokenSink {
         for (i in from until to) cover[i] = packed
     }
 
-    fun toStyles(text: CharSequence): Styles {
+    fun toStyles(text: CharSequence, atLeast: Int = 0): Styles {
         val spans = MappedSpans.Builder()
         var line = 0
         var column = 0
@@ -167,9 +190,12 @@ class SoraSpanSink(length: Int) : TokenSink {
         // a file past the highlighting cap is, would build a single line and then be asked
         // to draw its ten thousandth. `determine` fills the gap by carrying the last span
         // down, and `addNormalIfNull` covers an empty document.
-        spans.determine(line)
+        spans.determine(maxOf(line, atLeast - 1))
         spans.addNormalIfNull()
-        return Styles(spans.build())
+        // Wrapped, because padding narrows the window where the colours are behind the
+        // buffer but cannot close it: they are produced on another thread from a copy of
+        // the document, and the renderer draws whatever line it likes. See [SafeSpans].
+        return Styles(SafeSpans(spans.build()))
     }
 
     private companion object {
