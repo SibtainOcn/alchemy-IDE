@@ -181,13 +181,9 @@ fun BrandSplash() {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Image(
-            painter = painterResource(R.drawable.ic_alchemy_mark),
-            contentDescription = "Alchemy",
-            modifier = Modifier.size(64.dp),
-            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(TextHigh),
-        )
-        Spacer(Modifier.height(22.dp))
+        // The name alone, on the centre line. The mark sat above it and pushed the word
+        // off centre to make room for itself, which is the wrong way round: the word is
+        // what the shine is for, and the icon is already the thing you tapped to get here.
         Text(
             "ALCHEMY",
             style = TextStyle(

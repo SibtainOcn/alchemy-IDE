@@ -42,6 +42,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -84,6 +86,7 @@ import com.sibtainocn.alchemy.ui.exec.TerminalSheet
 import com.sibtainocn.alchemy.ui.exec.TerminalViewModel
 import com.sibtainocn.alchemy.ui.preview.MarkdownView
 import com.sibtainocn.alchemy.ui.theme.CodeFont
+import com.sibtainocn.alchemy.ui.theme.Hairline
 import com.sibtainocn.alchemy.ui.theme.InkHigh
 import com.sibtainocn.alchemy.ui.theme.InkRaised
 import com.sibtainocn.alchemy.ui.theme.LocalAccents
@@ -735,9 +738,9 @@ private fun EditorMenu(
         MenuRow(Ico.Redo, "Redo", enabled = vm.canRedo) { vm.redo() }
         HairlineDivider(Modifier.padding(vertical = 4.dp))
 
-        MenuRow(Ico.Wrap, "Word wrap", trailing = onOff(vm.wordWrap)) { vm.toggleWrap() }
-        MenuRow(Ico.Numbers, "Line numbers", trailing = onOff(vm.lineNumbers)) { vm.toggleLineNumbers() }
-        MenuRow(Ico.Code, "Auto-pair", trailing = onOff(vm.autoPair)) { vm.toggleAutoPair() }
+        MenuToggleRow(Ico.Wrap, "Word wrap", vm.wordWrap) { vm.toggleWrap() }
+        MenuToggleRow(Ico.Numbers, "Line numbers", vm.lineNumbers) { vm.toggleLineNumbers() }
+        MenuToggleRow(Ico.Code, "Auto-pair", vm.autoPair) { vm.toggleAutoPair() }
 
         HairlineDivider(Modifier.padding(vertical = 4.dp))
         // Reading a rendered page and editing its source are sized by different questions,
@@ -800,7 +803,45 @@ private fun StepperRow(
     }
 }
 
-private fun onOff(on: Boolean) = if (on) "On" else "Off"
+/**
+ * A menu row for something that is either on or off.
+ *
+ * The state used to be the words "On" and "Off" in the trailing slot, which reads as a
+ * label rather than as a control: it says what the setting is without saying that tapping
+ * would change it. A switch says both.
+ */
+@Composable
+private fun MenuToggleRow(
+    icon: ImageVector,
+    label: String,
+    on: Boolean,
+    onToggle: () -> Unit,
+) {
+    DropdownMenuItem(
+        onClick = onToggle,
+        leadingIcon = { Icon(icon, null, Modifier.size(18.dp), tint = TextMid) },
+        text = {
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = TextHigh)
+        },
+        trailingIcon = {
+            Switch(
+                checked = on,
+                // The whole row is the target, not just the switch. A control that is only
+                // half of what you can press is a control people miss the other half of.
+                onCheckedChange = null,
+                // Material's switch is sized for a settings screen; a menu row is tighter.
+                modifier = Modifier.scale(0.7f),
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                    uncheckedThumbColor = TextLow,
+                    uncheckedTrackColor = Color.Transparent,
+                    uncheckedBorderColor = Hairline,
+                ),
+            )
+        },
+    )
+}
 
 @Composable
 private fun MenuRow(

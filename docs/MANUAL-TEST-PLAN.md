@@ -32,7 +32,7 @@ need a file of a particular size and say so.
 |---|---|---|---|
 | 1.6 | Scroll a long file slowly | Numbers always match their lines. None missing, none doubled | |
 | 1.7 | Type in the middle of a long file | Numbers never flicker between N and N+1 | |
-| 1.8 | Turn word wrap on, find a line that wraps | Wrapped continuation rows carry **no** number. Only real lines are numbered | |
+| 1.8 | Turn word wrap on, find a line that wraps | Wrapped continuation rows carry **no** number. Only real lines are numbered | **pass** — verified on device, wrapped rows unnumbered |
 | 1.9 | Scroll to past line 512 in a long file | Numbers still correct — this is where the old cache overflowed | |
 | 1.10 | Open a file with 1000+ lines | Gutter is wide enough for 4 digits, nothing clipped | |
 | 1.11 | Put the caret on a line and look at the gutter | That line's number is in the accent colour, and the highlight band runs across gutter and text as one bar | |
@@ -60,8 +60,8 @@ need a file of a particular size and say so.
 | # | Do this | Expect | Result |
 |---|---|---|---|
 | 1.20 | Tap the filename in the editor bar | Sheet opens about half way up | |
-| 1.21 | Drag it to the very top | Reaches the top and **stays**. No up-down shaking | |
-| 1.22 | At the top, scroll the tree to its first row and keep pulling down | Sheet drags down smoothly. No fighting between sheet and list | |
+| 1.21 | Drag it to the very top | Reaches the top and **stays**. No up-down shaking | **pass** — confirmed by hand, no shake |
+| 1.22 | At the top, scroll the tree to its first row and keep pulling down | Sheet drags down smoothly. No fighting between sheet and list | **pass** — confirmed by hand |
 | 1.23 | Expand and collapse several folders, then drag again | Still no flicker | |
 | 1.24 | Tap a file in the tree | Sheet closes, that file opens | |
 | 1.25 | Tap the up arrow | Moves to the parent folder, previous folder is expanded | |
@@ -111,7 +111,7 @@ reconstructed later.
 
 | # | Do this | Expect | Result |
 |---|---|---|---|
-| 3.1 | Open a small `.py` | Text, colours, gutter, current-line band all as before | |
+| 3.1 | Open a small `.py` | Text, colours, gutter, current-line band all as before | **pass** — colours, gutter, band all correct |
 | 3.2 | Compare colours against phase 1 screenshots | Identical — same palette, same Monokai | |
 | 3.3 | Open `99_big_dataset.py` | Opens **fast**, scrolls at full speed. This is the point of the migration | |
 | 3.4 | Type in it | No lag at any file size | |
@@ -124,11 +124,11 @@ reconstructed later.
 
 | # | Do this | Expect | Result |
 |---|---|---|---|
-| 3.9 | Type a word, undo | Whole word goes, not one letter | |
+| 3.9 | Type a word, undo | Whole word goes, not one letter | **pass** |
 | 3.10 | Undo repeatedly to the start | Reaches the original file and stops | |
 | 3.11 | Redo back | Returns to where you were | |
 | 3.12 | Edit, switch tab, switch back, undo | History is still there — a tab keeps its own | |
-| 3.13 | Edit, then undo back to the saved state | Dirty marker **clears**. This is the one that needed a specific design | |
+| 3.13 | Edit, then undo back to the saved state | Dirty marker **clears**. This is the one that needed a specific design | **pass** — dot cleared, save dimmed, redo armed |
 | 3.14 | Undo to saved, then redo | Dirty marker returns | |
 | 3.15 | Save, edit, undo to the saved text | Dirty clears | |
 | 3.16 | Edit, undo past the save point, type something new | Stays dirty — the saved state is now unreachable | |
@@ -174,8 +174,8 @@ reconstructed later.
 
 | # | Do this | Expect | Result |
 |---|---|---|---|
-| 3.44 | Tap the text | Keyboard opens, caret lands where tapped | |
-| 3.45 | Type with the caret near the bottom | Caret stays visible above the keyboard | |
+| 3.44 | Tap the text | Keyboard opens, caret lands where tapped | **pass** — keyboard opens, caret lands |
+| 3.45 | Type with the caret near the bottom | Caret stays visible above the keyboard | **pass** — key bar and caret both clear of the keyboard |
 | 3.46 | Long-press a word | Selects it, handles appear | |
 | 3.47 | Drag a handle to the screen edge | Selection follows, scrolls, no handle left stranded | |
 | 3.48 | Long-press and drag with the key bar showing | Both usable, neither covers the other | |
@@ -218,3 +218,18 @@ reconstructed later.
 |---|---|---|---|
 | 3.66 | Repeat 1.3 with logcat, grep `Quality.*cost` | Worst frame lower again than 1.5. Record the number | |
 | 3.67 | Watch `Background concurrent copying GC` while opening ten files | Heap steady, no runaway growth | |
+
+---
+
+## Phase 4 — splash and menu toggles
+
+| # | Do this | Expect | Result |
+|---|---|---|---|
+| 4.1 | Cold start the app | The word ALCHEMY sits on the centre line, with no mark above it. The shine crosses it once | |
+| 4.2 | Watch the hand-over from the system splash | The OS still draws its own A icon first — that is Android's, not the app's, and is expected | |
+| 4.3 | Open the ⋮ menu | Word wrap, Line numbers and Auto-pair each carry a switch, not the words On/Off | |
+| 4.4 | Tap the *label* of one of them | Toggles. The whole row is the target, not just the switch | |
+| 4.5 | Tap the switch itself | Toggles once, not twice | |
+| 4.6 | Toggle one and check the editor behind | The setting actually applies — wrap rewraps, numbers appear or go | |
+| 4.7 | Reopen the menu | The switch reflects the state it was left in | |
+| 4.8 | Text size and preview zoom steppers | Unchanged, still steppers | |
