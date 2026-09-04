@@ -1,9 +1,9 @@
-# Hazel IDE
+# Alchemy IDE
 
 A file browser and a code editor for Android. Deliberately nothing else: no plugins, no
 build tools, no code execution, and no network permission at all.
 
-Built for reading and editing code on a phone — opening a Python file to fix a line,
+Built for reading and editing code on a phone - opening a Python file to fix a line,
 checking a README, editing a config on the device it runs on.
 
 ## What it does
@@ -13,18 +13,18 @@ checking a README, editing a config on the device it runs on.
 folder, and long-pressing anything offers rename, copy path and delete.
 
 **Edit.** Syntax highlighting for Python, Kotlin, Java, JavaScript/TypeScript,
-C/C++/Rust/Go/Swift, shell, JSON, XML/HTML, Markdown and config formats — Monokai colours
+C/C++/Rust/Go/Swift, shell, JSON, XML/HTML, Markdown and config formats - Monokai colours
 on a true black background.
 
 The typing gets out of your way: brackets and quotes pair themselves, typing a closer
 steps over the one already there, backspace between an empty pair removes both halves, and
-newlines carry the indent — including opening a block after a Python colon.
+newlines carry the indent - including opening a block after a Python colon.
 
 A key bar above the keyboard supplies what a phone IME has no way to offer: Ctrl, Shift,
 Caps and Tab, arrow keys, and every symbol code needs. Long-press any key and drag it into
 the order you want; it is remembered per language.
 
-**Preview.** Markdown renders with tables, task lists, quotes and code blocks — the code
+**Preview.** Markdown renders with tables, task lists, quotes and code blocks - the code
 highlighted by the same engine as the editor, so a snippet reads like the file it came
 from. Toggle between rendered and raw source at any time.
 
@@ -55,12 +55,12 @@ To run the tests:
 Grab an APK from [Releases](../../releases). Install the `arm64-v8a` build unless you know
 your device needs another; `universal` works everywhere and is slightly larger.
 
-Builds are named `HAZEL-IDE-<CHANNEL>-v<version>-<abi>.apk`, where the channel is `STABLE`,
+Builds are named `ALCHEMY-IDE-<CHANNEL>-v<version>-<abi>.apk`, where the channel is `STABLE`,
 `BETA` or `DEBUG`.
 
 ## Privacy
 
-Hazel declares no `INTERNET` permission. Nothing it reads can leave the device. It asks
+Alchemy declares no `INTERNET` permission. Nothing it reads can leave the device. It asks
 for All files access once, because a file manager that cannot see your files is not one.
 
 ## Licence

@@ -17,5 +17,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Hazel"
+rootProject.name = "Alchemy"
 include(":app")

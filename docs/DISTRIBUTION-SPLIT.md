@@ -1,11 +1,11 @@
 # The distribution split
 
-Hazel IDE is built twice from one codebase.
+Alchemy IDE is built twice from one codebase.
 
 | Flavour | Ships to | Application id | Can run code |
 |---|---|---|---|
-| `fdroid` | GitHub releases, F-Droid | `dev.hazel.code` | Yes, by asking Termux |
-| `playstore` | Google Play | `dev.hazel.code.ps` | No |
+| `fdroid` | GitHub releases, F-Droid | `com.sibtainocn.alchemy` | Yes, by asking Termux |
+| `playstore` | Google Play | `com.sibtainocn.alchemy.ps` | No |
 
 Everything a person uses the app for is identical in both: the editor, the file browser,
 the syntax highlighter, undo, the Markdown preview. The only difference is whether the
@@ -35,7 +35,7 @@ are writing belongs behind the interface instead.
 ```
 app/src/
 ├── main/                        shared, compiled into BOTH builds
-│   └── java/dev/hazel/code/
+│   └── java/com/sibtainocn/alchemy/
 │       ├── ui/ ...              editor, explorer, preview, key bar
 │       └── exec/
 │           ├── ExecutionProvider.kt   the interface, plus Readiness and RunResult
@@ -43,13 +43,13 @@ app/src/
 │
 ├── fdroid/                      ONLY in the GitHub and F-Droid build
 │   ├── AndroidManifest.xml            RUN_COMMAND permission, <queries> for com.termux
-│   └── java/dev/hazel/code/exec/
+│   └── java/com/sibtainocn/alchemy/exec/
 │       ├── Execution.kt               provider() returns the Termux implementation
 │       ├── Termux.kt                  Termux's published contract, in one place
 │       └── TermuxExecutionProvider.kt the intent plumbing
 │
 ├── playstore/                   ONLY in the Google Play build
-│   └── java/dev/hazel/code/exec/
+│   └── java/com/sibtainocn/alchemy/exec/
 │       └── Execution.kt               provider() returns a provider that runs nothing
 │
 ├── test/                        shared unit tests, run against both
@@ -143,7 +143,7 @@ find "$FD" -name 'Termux*.class' | wc -l          # more than 0
 ## Things that must not happen
 
 - The `fdroid` flavour must never gain an `applicationIdSuffix`. It is the build already
-  released as `dev.hazel.code`, and changing its id would turn the next update into a
+  released as `com.sibtainocn.alchemy`, and changing its id would turn the next update into a
   second, separate app for everyone who has it installed.
 - The Play Store build must never declare `com.termux.permission.RUN_COMMAND`. Keep it in
   the flavour manifest.

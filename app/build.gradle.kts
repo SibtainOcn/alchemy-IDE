@@ -49,13 +49,17 @@ val keystoreProperties = Properties().apply {
     }
 }
 
-fun signingValue(key: String, env: String): String? =
-    (keystoreProperties.getProperty(key) ?: System.getenv(env))?.takeIf { it.isNotBlank() }
+// Both spellings are read, newest first. The CI secrets were named for the old brand and
+// renaming them is a change in the repository settings rather than in this file, so the
+// build keeps answering to either until that happens.
+fun signingValue(key: String, vararg envs: String): String? =
+    (keystoreProperties.getProperty(key) ?: envs.firstNotNullOfOrNull { System.getenv(it) })
+        ?.takeIf { it.isNotBlank() }
 
-val storeFilePath = signingValue("storeFile", "HAZEL_STORE_FILE")
-val storePasswordValue = signingValue("storePassword", "HAZEL_STORE_PASSWORD")
-val keyAliasValue = signingValue("keyAlias", "HAZEL_KEY_ALIAS")
-val keyPasswordValue = signingValue("keyPassword", "HAZEL_KEY_PASSWORD")
+val storeFilePath = signingValue("storeFile", "ALCHEMY_STORE_FILE", "HAZEL_STORE_FILE")
+val storePasswordValue = signingValue("storePassword", "ALCHEMY_STORE_PASSWORD", "HAZEL_STORE_PASSWORD")
+val keyAliasValue = signingValue("keyAlias", "ALCHEMY_KEY_ALIAS", "HAZEL_KEY_ALIAS")
+val keyPasswordValue = signingValue("keyPassword", "ALCHEMY_KEY_PASSWORD", "HAZEL_KEY_PASSWORD")
 
 val canSign = storeFilePath != null &&
     storePasswordValue != null &&
@@ -64,11 +68,11 @@ val canSign = storeFilePath != null &&
     file(storeFilePath).exists()
 
 android {
-    namespace = "dev.hazel.code"
+    namespace = "com.sibtainocn.alchemy"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "dev.hazel.code"
+        applicationId = "com.sibtainocn.alchemy"
         minSdk = 24
         targetSdk = 37
         versionCode = appVersionCode
@@ -83,9 +87,13 @@ android {
     productFlavors {
         create("fdroid") {
             dimension = "distribution"
-            // Deliberately no applicationIdSuffix. This flavour is the build already
-            // released as dev.hazel.code, and changing its id would strand every install
-            // that has it: the update would arrive as a second, separate app.
+            // Deliberately no applicationIdSuffix: this flavour carries the plain
+            // application id, and the Play Store build is the one that gets a suffix.
+            //
+            // The id itself changed with the rename to Alchemy, so a device holding the
+            // old dev.hazel.code build will see this as a separate app rather than as an
+            // update to that one. That is what an application id change always means and
+            // there is no migration path around it.
         }
         create("playstore") {
             dimension = "distribution"
@@ -168,8 +176,8 @@ dependencies {
 // them, so the build's own files are left alone and the ones meant for people are copied
 // out under readable names:
 //
-//     HAZEL-IDE-STABLE-v1.0.0-arm64-v8a.apk
-//     HAZEL-IDE-BETA-v2.0.0-beta.1-universal.apk
+//     ALCHEMY-IDE-STABLE-v1.0.0-arm64-v8a.apk
+//     ALCHEMY-IDE-BETA-v2.0.0-beta.1-universal.apk
 //
 // The copy is what CI attaches to a GitHub release, alongside checksums.txt.
 // ---------------------------------------------------------------------------
@@ -177,7 +185,7 @@ val packagedApkDir = layout.buildDirectory.dir("outputs/packaged")
 
 tasks.register("packageReleaseApks") {
     group = "distribution"
-    description = "Copies the release APKs out under HAZEL-IDE-<CHANNEL>-v<version>-<abi>.apk names."
+    description = "Copies the release APKs out under ALCHEMY-IDE-<CHANNEL>-v<version>-<abi>.apk names."
     // The fdroid flavour is what ships from GitHub releases. The Play Store build is
     // uploaded from its own bundle and never goes through this task.
     dependsOn("assembleFdroidRelease")
@@ -210,7 +218,7 @@ tasks.register("packageReleaseApks") {
                 .removeSuffix("-release")
                 .ifBlank { "universal" }
 
-            val target = File(into, "HAZEL-IDE-$channel-v$version-$abi.apk")
+            val target = File(into, "ALCHEMY-IDE-$channel-v$version-$abi.apk")
             apk.copyTo(target, overwrite = true)
 
             // `java` is a Gradle extension accessor in this DSL, so MessageDigest is
@@ -227,7 +235,7 @@ tasks.register("packageReleaseApks") {
         logger.lifecycle("  Packaged ${apks.size} APKs into ${into.path}")
         logger.lifecycle("  Channel: $channel   Version: $version   Signed: $signed")
         if (!signed) {
-            logger.lifecycle("  NOTE: unsigned — set up keystore.properties to produce installable APKs.")
+            logger.lifecycle("  NOTE: unsigned - set up keystore.properties to produce installable APKs.")
         }
         logger.lifecycle("")
     }

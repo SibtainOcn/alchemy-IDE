@@ -1,8 +1,65 @@
 # Changelog
 
-All notable changes to Hazel IDE are recorded here.
+All notable changes to Alchemy IDE are recorded here. Releases up to 1.1.0 shipped under
+the name Hazel IDE.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Changed
+- **The app is now Alchemy.** New name everywhere it is shown, a new mark, and a new
+  application id: `com.sibtainocn.alchemy`, with `.ps` still appended for the Play Store
+  flavour. An application id is what Android uses to tell one app from another, so a
+  device holding the old build will see this as a separate install rather than as an
+  update to it. There is no migration path around that, and none is pretended here.
+- **Launch goes straight into the opening animation.** The system splash hands over on
+  the first frame onto a pure black screen with the mark and the name, and a single band
+  of light crosses the letters over 1.5 seconds. It replaces the spinner that used to sit
+  there, which said "wait" when there was nothing to wait for.
+- **The app icon is the letter A**, stroked white on the app's own near-black, with the
+  crossbar raised so its counter is a triangle. It ships as an adaptive icon with a
+  monochrome layer, so Android 13 and later can tint it with the system theme.
+- **Files that are not source get a real icon.** A page with its corner turned back,
+  coloured by kind and carrying a mark for it: ruled lines for text, a frame and a horizon
+  for images, a play triangle for video, a note for audio, a zip pull for archives, and
+  the format's name for PDFs, packages and binaries. Source files keep the extension tag,
+  because in a folder of thirty Python files the extension is the part worth reading, but
+  the tag now sits on a graded plate with a hairline edge rather than a flat wash.
+- **The date on each row is smaller than the two lines beside it.** It is what you check
+  after finding the row, not what should be competing to be read first.
+- **The filename in the editor bar sits on a plate.** It was always the way into
+  something, and nothing about bare title text said so.
+
+### Added
+- **Cut, copy and paste, at the filesystem level.** Long-press any file or folder and it
+  can be picked up. A strip appears above the list saying what is being carried, with an X
+  that puts it down again, and the + button in the corner becomes Paste for as long as
+  something is waiting. A move inside one volume is a rename, so a folder of any size
+  arrives instantly; across volumes the bytes travel through the kernel by channel
+  transfer, falling back to a buffered copy on the volumes that refuse it. The buffer is
+  sized against what the heap can actually spare, progress is throttled so the copy spends
+  its time copying, and a run that fails part way removes only what it wrote.
+- **A conflict dialog with Skip, Replace and Keep both.** Both sides are shown with their
+  size and date, because the question is never really "replace?" but "which of these two
+  did I mean". Two folders of the same name merge rather than displacing each other, and
+  each clash inside is asked about in turn until "do this for everything else" is ticked.
+  Dismissing the prompt stops the whole transfer, which is the only reading of a dismissed
+  prompt that cannot lose anything.
+- **Move to**, which asks for a destination instead of going through the clipboard. A
+  folder browser with the confirm button naming where you are standing, and that button
+  disabled with a reason if you have walked inside the thing you are moving.
+- **Pin to top.** Any file or folder can be lifted to the head of its list with a pin mark
+  beside it, and unpinned the same way. Pins live in the app's own storage rather than
+  being worked out from the filesystem, which has nowhere to record them, so they cost one
+  read at startup and nothing at all when a folder is opened. A pin follows its file
+  through a rename and goes when the file does.
+- **A file tree behind the filename in the editor.** Tapping the name opens the folder
+  around the open file as a tree: folders expand in place rather than pushing a new
+  screen, so a file's neighbours and its parent's neighbours are visible at once, and
+  tapping a file swaps what the editor is holding. Dotfiles are listed, because a
+  `.gitignore` is exactly the kind of file you open from there. What the file itself is,
+  its path and size and line count, is still one row down in the menu.
 
 ## [1.1.0] — 2026-08-25
 
@@ -83,7 +140,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - **Key bar modifiers.** Ctrl, Shift, Caps and Tab, pinned so they never scroll out of
   reach. Ctrl and Shift latch for one key; Caps locks. Arming Ctrl swaps the scrolling
   group for a shortcut set (save, undo, redo, select all, copy, cut, paste).
-- **Caret keys.** Arrows, home and end, with Shift to extend the selection — none of which
+- **Caret keys.** Arrows, home and end, with Shift to extend the selection - none of which
   a phone keyboard offers.
 - **Draggable key bar.** Long-press any key and drag it into place. Saved per language; a
   saved order survives the key set changing between versions.
@@ -240,7 +297,7 @@ plugins, no build tools, no code execution, no network permission.
 ### Added
 
 **Explorer**
-- Single-list browser over internal storage — folders and files together, tap a folder to
+- Single-list browser over internal storage - folders and files together, tap a folder to
   descend, tap a file to open it.
 - `..` row for going up, plus a breadcrumb strip where every segment is a jump target.
 - Scroll position remembered per folder, so backing out lands where you left.
@@ -253,12 +310,12 @@ plugins, no build tools, no code execution, no network permission.
   syntax colour, so a source directory is scannable by type.
 
 **Editor**
-- Syntax highlighting via a single-pass character scanner — correct around strings inside
+- Syntax highlighting via a single-pass character scanner - correct around strings inside
   comments, comments inside strings, and Python's triple-quoted blocks.
 - Languages: Python, Kotlin, Java, JavaScript/TypeScript, C/C++/Rust/Go/Swift, shell,
   JSON, XML/HTML, Markdown, and config formats.
 - Monokai colours: pink keywords and operators, green definitions, cyan italic types,
-  purple literals — on a true-black ground.
+  purple literals - on a true-black ground.
 - C and C++ carry per-token overrides: white numerics, orange strings, red library calls,
   cyan braces.
 - Smart typing: bracket and quote pairing, wrapping a selection, stepping over a closer,
@@ -269,7 +326,7 @@ plugins, no build tools, no code execution, no network permission.
 - Gutter line numbers that stay aligned across wrapped lines, current-line band, and a
   live line/column readout.
 - Word wrap, line numbers, auto-pair and text size all toggleable and remembered.
-- Undo/redo with coalesced steps — a run of typing is one step, not one per character.
+- Undo/redo with coalesced steps - a run of typing is one step, not one per character.
 - Atomic saves: written beside the target and swapped, so a failed write cannot destroy
   the original.
 
@@ -284,7 +341,7 @@ plugins, no build tools, no code execution, no network permission.
 - True black throughout (`#000000` page, `#0A0A0A` raised), cyan interactive accent, amber
   reserved for folder glyphs.
 - Material 3 expressive motion: spring-based transitions, directional folder navigation,
-  press states, and a shape-morphing loader built from `RoundedPolygon` geometry — the
+  press states, and a shape-morphing loader built from `RoundedPolygon` geometry - the
   Play Store loading behaviour, at whatever size the context needs.
 - Hand-authored icon set on a 24-unit grid; the Material icon library is not a dependency.
 - Splash screen and adaptive launcher icon from the Hazel mark.
