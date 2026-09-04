@@ -2,13 +2,13 @@
 <resources>
 
     <!-- Pre-Android 12 splash falls back to a plain black window with the mark centred. -->
-    <style name="Theme.Hazel.Starting" parent="Theme.SplashScreen">
+    <style name="Theme.Alchemy.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">#000000</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/splash_mark</item>
-        <item name="postSplashScreenTheme">@style/Theme.Hazel</item>
+        <item name="postSplashScreenTheme">@style/Theme.Alchemy</item>
     </style>
 
-    <style name="Theme.Hazel" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.Alchemy" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@android:color/black</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>

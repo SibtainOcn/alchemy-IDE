@@ -1,6 +1,6 @@
 # Running code through Termux
 
-How Hazel IDE runs a file without shipping a single interpreter, what it costs, and every
+How Alchemy IDE runs a file without shipping a single interpreter, what it costs, and every
 place a change in Termux would land.
 
 Written after getting it wrong twice on a real device. The two mistakes are documented
@@ -11,10 +11,10 @@ the app simply did not work.
 
 ## 1. The shape of it
 
-Hazel never executes anything. Termux does.
+Alchemy never executes anything. Termux does.
 
 ```
-Hazel IDE                      Android                      Termux
+Alchemy IDE                      Android                      Termux
     |                             |                            |
     |-- startForegroundService -->|                            |
     |   com.termux.RUN_COMMAND    |--- RunCommandService ----->|
@@ -24,8 +24,8 @@ Hazel IDE                      Android                      Termux
     |          stdout, stderr, exitCode                        |
 ```
 
-Hazel's APK stays about 1.5 MB. Every language the user installs lives inside Termux, and
-Hazel does not know or care what is in there beyond asking whether a command exists.
+Alchemy's APK stays about 1.5 MB. Every language the user installs lives inside Termux, and
+Alchemy does not know or care what is in there beyond asking whether a command exists.
 
 Termux is not a dependency in the Gradle sense. It is a separate app the user installs
 themselves, and it can be missing, wrong, out of date, or refusing to talk. Most of the
@@ -39,14 +39,14 @@ Only the F-Droid and GitHub build can run code. The Play Store build does not ha
 code compiled into it at all. See `docs/DISTRIBUTION-SPLIT.md` for that split.
 
 ```
-app/src/main/java/dev/hazel/code/exec/     shared, in both builds
+app/src/main/java/com/sibtainocn/alchemy/exec/     shared, in both builds
   ExecutionProvider.kt    the interface, Readiness ladder, RunRequest, RunResult
   Runtime.kt              Python, C, Go: packages, probe, command, shell quoting
   Console.kt              cd handling, path resolution, line types
   InstallPlanner.kt       what to install, in what order
   SetupGuide.kt           the shape of the setup instructions
 
-app/src/fdroid/java/dev/hazel/code/exec/   the Termux build only
+app/src/fdroid/java/com/sibtainocn/alchemy/exec/   the Termux build only
   Termux.kt                    every string Termux publishes, in one place
   TermuxExecutionProvider.kt   the intent plumbing
   TermuxResultReceiver.kt      where the answer arrives
@@ -136,10 +136,10 @@ shape regardless.
 | Install Termux from GitHub, not Google Play | The Play copy is frozen years behind and cannot take commands from other apps. It cannot be updated into one that can. |
 | Grant `com.termux.permission.RUN_COMMAND` | A dangerous-level permission Termux declares. Requires a runtime prompt. |
 | `allow-external-apps=true` in `~/.termux/termux.properties` | Lives inside Termux's private storage. Nothing outside Termux can write it, and until it is set there is no channel to ask Termux to write it either. |
-| `termux-setup-storage` | Grants Termux access to shared storage, where Hazel's files live. Raises its own Android permission dialog. |
+| `termux-setup-storage` | Grants Termux access to shared storage, where Alchemy's files live. Raises its own Android permission dialog. |
 | Restart Termux | `termux-reload-settings` usually suffices, but the service that takes commands sometimes holds the old answer. |
 
-The command Hazel offers for the third step repairs a broken file rather than assuming an
+The command Alchemy offers for the third step repairs a broken file rather than assuming an
 empty one:
 
 ```bash
@@ -161,7 +161,7 @@ Termux reports a refusal by **posting its own notification and never replying**.
 no error to read. The absence of an answer is the only evidence, so it is waited for once,
 deliberately, rather than discovered by every command the user types.
 
-`TermuxExecutionProvider.verify()` runs `echo hazel-ok` with a seven second budget. A reply
+`TermuxExecutionProvider.verify()` runs `echo alchemy-ok` with a seven second budget. A reply
 means the whole channel works. No reply means `Readiness.RunnerNotAnswering`, which on
 screen says both of its likely causes: refusing external apps, or never opened since
 install.
@@ -194,7 +194,7 @@ that shapes everything above it.
 | | Works | Does not |
 |---|---|---|
 | `ls`, `git status`, `python x.py`, `go run .` | yes | |
-| `cd src` remembered next command | | tracked by Hazel, not by a shell |
+| `cd src` remembered next command | | tracked by Alchemy, not by a shell |
 | `export FOO=1`, an activated venv | | nothing persists between commands |
 | A script calling `input()` | | **blocks forever** |
 | `vim`, `htop`, anything full-screen | | no terminal to draw on |
@@ -206,7 +206,7 @@ that shapes everything above it.
 
 | Command | Time |
 |---|---|
-| `echo hazel-ok` (the handshake) | 80 ms |
+| `echo alchemy-ok` (the handshake) | 80 ms |
 | `ls` | 162 ms |
 | a 330 line Python script | 3.2 s |
 | `pkg install -y python` | 103 s, exit 0 |
@@ -218,17 +218,17 @@ way. A slow command is a slow command, not a slow terminal.
 ### The `input()` problem in detail
 
 A script that asks for input does not fail. It blocks, because stdin is an open pipe
-nobody will ever write to. Hazel gives up waiting after its timeout, and **the process
-stays alive inside Termux** until something kills it. Hazel's stop control stops the
+nobody will ever write to. Alchemy gives up waiting after its timeout, and **the process
+stays alive inside Termux** until something kills it. Alchemy's stop control stops the
 waiting, not the command, and says so rather than implying otherwise.
 
 Fixing this properly needs a persistent session rather than one process per command. The
 approach that would work without adding the `INTERNET` permission is a file bridge: one
-long-lived shell inside Termux reading from a file Hazel appends to, writing to a file
-Hazel tails.
+long-lived shell inside Termux reading from a file Alchemy appends to, writing to a file
+Alchemy tails.
 
 ```bash
-tail -n +1 -f ~/storage/shared/.hazel/in.sh | bash >> ~/storage/shared/.hazel/out.log 2>&1
+tail -n +1 -f ~/storage/shared/.alchemy/in.sh | bash >> ~/storage/shared/.alchemy/out.log 2>&1
 ```
 
 That buys real session state, streaming output, and `input()` that works. It costs a
@@ -248,7 +248,7 @@ the file extensions, an approximate download size, and the shell line that runs 
 C is the interesting one:
 
 ```kotlin
-C -> "clang $file -o \"\${TMPDIR:-/data/data/com.termux/files/usr/tmp}/hazel-run\" && ..."
+C -> "clang $file -o \"\${TMPDIR:-/data/data/com.termux/files/usr/tmp}/alchemy-run\" && ..."
 ```
 
 The compiled program **cannot** be written next to the source. Android mounts shared
@@ -267,7 +267,7 @@ file, and HTML is rendered rather than run.
 It is another project, with its own release schedule, and this integration depends on
 strings it publishes rather than on a versioned API. A Termux update **can** break it.
 
-**Everything Termux owns is in one file: `app/src/fdroid/java/dev/hazel/code/exec/Termux.kt`.**
+**Everything Termux owns is in one file: `app/src/fdroid/java/com/sibtainocn/alchemy/exec/Termux.kt`.**
 That is the whole point of that file existing. If Termux changes something, that is where
 the change goes, and in most cases nowhere else.
 
@@ -291,19 +291,19 @@ Two things outside `Termux.kt` know anything about the protocol, and both are sm
 
 ### How to diagnose the next breakage
 
-The provider logs both sides under the tag `HazelTermux`:
+The provider logs both sides under the tag `AlchemyTermux`:
 
 ```bash
 adb logcat -c
 # then use the app
-adb logcat -d | grep HazelTermux
+adb logcat -d | grep AlchemyTermux
 ```
 
 A healthy pair of lines:
 
 ```
-D/HazelTermux: request 5: echo hazel-ok
-D/HazelTermux: result for request 5: exit=0 err=-1 stdout=9 chars
+D/AlchemyTermux: request 5: echo alchemy-ok
+D/AlchemyTermux: result for request 5: exit=0 err=-1 stdout=9 chars
 ```
 
 A request with no matching result means Termux took the command and did not answer, which

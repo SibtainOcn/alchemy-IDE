@@ -20,7 +20,7 @@ env:
 # One job, not two.
 #
 # Verification and packaging were split so a failing test would not wait on a release
-# build — but packaging needed verification to pass first, so the two never ran in
+# build - but packaging needed verification to pass first, so the two never ran in
 # parallel and the split bought nothing while paying twice for checkout, JDK, Gradle and
 # the Android SDK. The steps below still run cheapest-first, so a syntax error or a broken
 # test still fails in a couple of minutes; it just does so without a second machine.
@@ -50,7 +50,7 @@ jobs:
 
       # Compiles settings.gradle.kts and every build.gradle.kts without building anything.
       # A syntax error or a bad plugin coordinate fails here, in seconds, with a clear
-      # message — before the Android tooling has run at all.
+      # message - before the Android tooling has run at all.
       - name: Gradle script syntax
         run: ./gradlew help --quiet
 
@@ -72,7 +72,7 @@ jobs:
       # Packaging runs on main only.
       #
       # A pull request is answering "is this change correct?", and the steps above answer
-      # it. Assembling both variants — R8 included — was adding several minutes to every
+      # it. Assembling both variants - R8 included - was adding several minutes to every
       # PR to re-prove something no PR had changed. On main it still runs on every merge,
       # so a shrinking problem is caught within one commit of arriving rather than at tag
       # time.
@@ -111,9 +111,9 @@ jobs:
         if: success() && github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
-          name: hazel-debug-apk
+          name: alchemy-debug-apk
           path: app/build/outputs/apk/fdroid/debug/*.apk
-          retention-days: 14
+          retention-days: 1
 
       - name: Upload reports on failure
         if: failure()

@@ -4,26 +4,23 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     <!--
-      The Hazel bolt, drawn the way the other Hazel app draws it.
+      The A on the 108-unit launcher canvas.
 
-      The path is an open curve meant to be stroked. Filling it as well closes it through
-      the shortest line between its ends, which is what turned the launcher icon into a
-      solid blob rather than a bolt - so the fill is transparent and the stroke does the
-      drawing.
-
-      24 units scaled by 2 is 48 of the 108-unit canvas, offset by 30 to centre it. That
-      keeps the mark inside the 66-unit safe circle, so no launcher mask can clip it.
+      Everything sits inside the 66-unit safe circle centred on 54,54, so no launcher mask
+      can clip a leg: the widest points are the two feet at 34,76 and 74,76, which are
+      just under 30 units out from the centre.
     -->
-    <group
-        android:translateX="30"
-        android:translateY="30"
-        android:scaleX="2.0"
-        android:scaleY="2.0">
-        <path
-            android:pathData="M15.268,18.229C13.289,20.907 12.299,22.246 11.376,21.963C10.453,21.68 10.453,20.038 10.453,16.753L10.453,16.443C10.453,15.259 10.453,14.666 10.074,14.295L10.054,14.275C9.667,13.912 9.051,13.912 7.818,13.912C5.599,13.912 4.489,13.912 4.115,13.239C4.108,13.228 4.102,13.216 4.096,13.205C3.742,12.522 4.385,11.653 5.67,9.914L8.732,5.771C10.711,3.093 11.701,1.754 12.624,2.037C13.547,2.32 13.547,3.962 13.547,7.247V7.557C13.547,8.742 13.547,9.334 13.926,9.705L13.946,9.725C14.333,10.088 14.949,10.088 16.182,10.088C18.401,10.088 19.511,10.088 19.885,10.761C19.892,10.772 19.898,10.784 19.904,10.795C20.258,11.478 19.615,12.347 18.33,14.086"
-            android:fillColor="#00000000"
-            android:strokeWidth="1.5"
-            android:strokeColor="#FFFFFF"
-            android:strokeLineCap="round" />
-    </group>
+    <path
+        android:pathData="M34,76 L54,32 L74,76"
+        android:fillColor="#00000000"
+        android:strokeWidth="7.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M42.5,61 L65.5,61"
+        android:fillColor="#00000000"
+        android:strokeWidth="7.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
 </vector>

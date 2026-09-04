@@ -82,28 +82,28 @@ jobs:
 
       # The keystore lives in a secret as base64 and is written to disk only for this job.
       # If the secret is absent the build still runs and produces unsigned APKs rather
-      # than failing outright — the release is then clearly marked as unsigned.
+      # than failing outright - the release is then clearly marked as unsigned.
       - name: Decode keystore
         id: keystore
         env:
-          KEYSTORE_BASE64: ${{ secrets.HAZEL_KEYSTORE_BASE64 }}
+          KEYSTORE_BASE64: ${{ secrets.ALCHEMY_KEYSTORE_BASE64 || secrets.HAZEL_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/hazel.keystore"
-            echo "path=$RUNNER_TEMP/hazel.keystore" >> "$GITHUB_OUTPUT"
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/alchemy.keystore"
+            echo "path=$RUNNER_TEMP/alchemy.keystore" >> "$GITHUB_OUTPUT"
             echo "signed=true" >> "$GITHUB_OUTPUT"
-            echo "Keystore decoded ($(stat -c%s "$RUNNER_TEMP/hazel.keystore") bytes)."
+            echo "Keystore decoded ($(stat -c%s "$RUNNER_TEMP/alchemy.keystore") bytes)."
           else
             echo "signed=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::No HAZEL_KEYSTORE_BASE64 secret — APKs will be unsigned."
+            echo "::warning::No signing secret - APKs will be unsigned."
           fi
 
       - name: Build and package APKs
         env:
-          HAZEL_STORE_FILE: ${{ steps.keystore.outputs.path }}
-          HAZEL_STORE_PASSWORD: ${{ secrets.HAZEL_STORE_PASSWORD }}
-          HAZEL_KEY_ALIAS: ${{ secrets.HAZEL_KEY_ALIAS }}
-          HAZEL_KEY_PASSWORD: ${{ secrets.HAZEL_KEY_PASSWORD }}
+          ALCHEMY_STORE_FILE: ${{ steps.keystore.outputs.path }}
+          ALCHEMY_STORE_PASSWORD: ${{ secrets.ALCHEMY_STORE_PASSWORD || secrets.HAZEL_STORE_PASSWORD }}
+          ALCHEMY_KEY_ALIAS: ${{ secrets.ALCHEMY_KEY_ALIAS || secrets.HAZEL_KEY_ALIAS }}
+          ALCHEMY_KEY_PASSWORD: ${{ secrets.ALCHEMY_KEY_PASSWORD || secrets.HAZEL_KEY_PASSWORD }}
         run: |
           ./gradlew :app:packageReleaseApks \
             -PversionName='${{ steps.version.outputs.version }}' \
@@ -185,7 +185,7 @@ jobs:
           # Title carries the app name: a releases list, a notification and a shared link
           # all show the title alone, and "1.2.0" on its own says nothing about what it is.
           gh release create "$TAG" \
-            --title "Hazel-IDE ${{ steps.version.outputs.version }}" \
+            --title "Alchemy-IDE ${{ steps.version.outputs.version }}" \
             --notes-file release-notes.md \
             $PRERELEASE_FLAG \
             app/build/outputs/packaged/*.apk \
