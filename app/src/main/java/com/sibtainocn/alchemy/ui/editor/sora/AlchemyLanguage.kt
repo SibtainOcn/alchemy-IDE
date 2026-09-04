@@ -7,9 +7,14 @@ import com.sibtainocn.alchemy.syntax.TokenSink
 import io.github.rosemoe.sora.lang.EmptyLanguage
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager
 import io.github.rosemoe.sora.lang.analysis.SimpleAnalyzeManager
+import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult
+import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler
 import io.github.rosemoe.sora.lang.styling.MappedSpans
 import io.github.rosemoe.sora.lang.styling.Styles
 import io.github.rosemoe.sora.lang.styling.TextStyle
+import io.github.rosemoe.sora.text.CharPosition
+import io.github.rosemoe.sora.text.Content
+import io.github.rosemoe.sora.widget.SymbolPairMatch
 
 /**
  * Alchemy's scanner, as something the editor can be handed.
@@ -19,7 +24,11 @@ import io.github.rosemoe.sora.lang.styling.TextStyle
  * any more. The scan itself is the same one the Markdown preview uses - the only
  * difference is the sink it reports to.
  */
-class AlchemyLanguage(private val language: Language) : EmptyLanguage() {
+class AlchemyLanguage(
+    private val language: Language,
+    /** Whether typing an opener should write its partner. A user preference. */
+    private val autoPair: Boolean = true,
+) : EmptyLanguage() {
 
     private val analyzer = object : SimpleAnalyzeManager<Unit>() {
         override fun analyze(text: StringBuilder, delegate: Delegate<Unit>): Styles {
@@ -33,6 +42,75 @@ class AlchemyLanguage(private val language: Language) : EmptyLanguage() {
     override fun getAnalyzeManager(): AnalyzeManager = analyzer
 
     override fun useTab(): Boolean = false
+
+    /**
+     * Brackets and quotes that write their partner.
+     *
+     * This used to be worked out by diffing the value the IME handed back, because a
+     * Compose text field offers no key event to hook. The editor has real key events, so
+     * the rules can simply be declared - and stepping over a closer, wrapping a selection
+     * and not pairing inside a word all come with them rather than being re-derived.
+     */
+    private val pairs = SymbolPairMatch().apply {
+        if (autoPair) {
+            putPair('(', SymbolPairMatch.SymbolPair("(", ")"))
+            putPair('[', SymbolPairMatch.SymbolPair("[", "]"))
+            putPair('{', SymbolPairMatch.SymbolPair("{", "}"))
+            putPair('"', SymbolPairMatch.SymbolPair("\"", "\""))
+            putPair('\'', SymbolPairMatch.SymbolPair("'", "'"))
+            putPair('`', SymbolPairMatch.SymbolPair("`", "`"))
+        }
+    }
+
+    override fun getSymbolPairs(): SymbolPairMatch = pairs
+
+    private val newline = arrayOf<NewlineHandler>(BlockIndent(language))
+
+    override fun getNewlineHandlers(): Array<NewlineHandler> = newline
+}
+
+/**
+ * What Enter does: carry the current indent down, and add one more when the line just
+ * opened a block.
+ *
+ * A line that opens a block *and* already has its closer sitting after the caret gets
+ * three lines out of one Enter - the opener, an indented blank one to type into, and the
+ * closer on its own line - which is the only arrangement that does not leave you
+ * reformatting what you just typed.
+ */
+private class BlockIndent(private val lang: Language) : NewlineHandler {
+
+    override fun matchesRequirement(text: Content, position: CharPosition, style: Styles?): Boolean =
+        true
+
+    override fun handleNewline(
+        text: Content,
+        position: CharPosition,
+        style: Styles?,
+        tabSize: Int,
+    ): NewlineHandleResult {
+        val line = text.getLineString(position.line)
+        val at = position.column.coerceIn(0, line.length)
+        val before = line.substring(0, at)
+        val after = line.substring(at)
+        val indent = before.takeWhile { it == ' ' || it == '\t' }
+        val trimmed = before.trimEnd()
+
+        val opens = when (lang) {
+            // A trailing colon is Python's block opener; the bracket cases cover the rest.
+            Language.PYTHON -> trimmed.endsWith(":")
+            else -> false
+        } || trimmed.endsWith("{") || trimmed.endsWith("(") || trimmed.endsWith("[")
+
+        val body = indent + if (opens) EditorOps.INDENT else ""
+        val closerAhead = after.firstOrNull() in setOf('}', ')', ']')
+
+        if (opens && closerAhead) {
+            val tail = "\n" + indent
+            return NewlineHandleResult("\n" + body + tail, tail.length)
+        }
+        return NewlineHandleResult("\n" + body, 0)
+    }
 }
 
 /**

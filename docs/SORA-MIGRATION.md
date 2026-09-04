@@ -296,6 +296,11 @@ what currently pins them — so this has to be settled before the port, not afte
 
 ## To verify on device at the end
 
+The full row-by-row checklist lives in [MANUAL-TEST-PLAN.md](MANUAL-TEST-PLAN.md),
+which covers every visible change since the freeze fix, in the order they were made. What
+follows is the shortlist of places where the two models differ enough that reading the
+code will not tell you whether it works.
+
 Not defects, but the places where the two models differ enough that reading the code will
 not tell you whether it works. Each needs a real device and a real soft keyboard.
 

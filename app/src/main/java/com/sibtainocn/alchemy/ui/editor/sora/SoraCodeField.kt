@@ -35,6 +35,7 @@ fun SoraCodeField(
     palette: EditorPalette,
     fontSizeSp: Int,
     wordWrap: Boolean,
+    autoPair: Boolean,
     lineNumbers: Boolean,
     readOnly: Boolean,
     onChanged: () -> Unit,
@@ -47,7 +48,7 @@ fun SoraCodeField(
     val caret by rememberUpdatedState(onCaret)
 
     val scheme = remember(palette) { palette.toColorScheme() }
-    val editorLanguage = remember(language) { AlchemyLanguage(language) }
+    val editorLanguage = remember(language, autoPair) { AlchemyLanguage(language, autoPair) }
 
     AndroidView(
         modifier = modifier,
