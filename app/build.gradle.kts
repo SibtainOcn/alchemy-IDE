@@ -141,7 +141,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        // CrashGuard stamps the version into the report it writes.
+        buildConfig = true
+    }
 
     testOptions {
         unitTests {

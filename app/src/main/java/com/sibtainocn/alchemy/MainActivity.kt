@@ -37,6 +37,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sibtainocn.alchemy.ui.common.AccessGate
 import com.sibtainocn.alchemy.ui.common.BrandSplash
+import com.sibtainocn.alchemy.ui.common.CrashReportDialog
 import com.sibtainocn.alchemy.ui.common.SPLASH_MS
 import com.sibtainocn.alchemy.ui.common.Motion
 import com.sibtainocn.alchemy.ui.common.Storage
@@ -108,6 +109,10 @@ private fun AlchemyApp(startFile: File?) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
+    // Whatever the last run died of, shown once and then forgotten. Read before anything
+    // else draws, so a crash on the very first frame still gets reported.
+    var crash by remember { mutableStateOf(CrashGuard.lastReport(context)) }
+
     var hasAccess by remember { mutableStateOf(Storage.hasAccess(context)) }
     var booting by remember { mutableStateOf(true) }
     var openPath by rememberSaveable { mutableStateOf(startFile?.absolutePath) }
@@ -143,6 +148,13 @@ private fun AlchemyApp(startFile: File?) {
         // the first frame, so this is the whole of the opening.
         delay(SPLASH_MS.toLong())
         booting = false
+    }
+
+    crash?.let { report ->
+        CrashReportDialog(report) {
+            CrashGuard.clear(context)
+            crash = null
+        }
     }
 
     AnimatedContent(
