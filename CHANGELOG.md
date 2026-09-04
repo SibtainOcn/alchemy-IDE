@@ -5,7 +5,7 @@ the name Hazel IDE.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.2] - 2026-09-04
 
 ### Fixed
 - **Picking a file from the editor's tree now actually opens it.** The editor captured its
