@@ -33,10 +33,12 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sibtainocn.alchemy.data.Language
@@ -57,12 +59,22 @@ import com.sibtainocn.alchemy.ui.theme.TextMid
  * Parsing lives in [MarkdownParser]; this file only draws. Blocks are rendered from a
  * LazyColumn so a long README costs what is on screen rather than what is in the file.
  *
- * Tables scroll horizontally with fixed column widths rather than dividing the screen by
- * the column count. Three columns of prose squeezed into a phone's width produce a
- * paragraph per cell and a row twenty lines tall; a real column you can push sideways is
- * the readable trade.
+ * Tables scroll horizontally rather than dividing the screen by the column count. Three
+ * columns of prose squeezed into a phone's width produce a paragraph per cell and a row
+ * twenty lines tall; a real column you can push sideways is the readable trade.
  */
-private val TABLE_COLUMN_WIDTH = 168.dp
+
+/**
+ * A column is as wide as the widest thing in it, up to a cap past which its cells wrap.
+ *
+ * One width for every column made a table of two-character cells as wide as a table of
+ * sentences, which is not what any Markdown reader does and spends the horizontal scroll
+ * on empty space. The cap is what stops a single long cell pushing every other column off
+ * the screen: past it the cell wraps and its row grows taller instead.
+ */
+private val TABLE_COLUMN_MIN = 48.dp
+private val TABLE_COLUMN_MAX = 280.dp
+private val TABLE_CELL_PADDING = 12.dp
 
 @Composable
 fun MarkdownView(text: String, modifier: Modifier = Modifier, zoom: Float = 1f) {
@@ -172,6 +184,29 @@ private fun CodeBlock(block: MdBlock.Code) {
 @Composable
 private fun TableBlock(block: MdBlock.Table) {
     val a = LocalAccents.current
+    val link = MaterialTheme.colorScheme.primary
+    val measurer = rememberTextMeasurer()
+    val bodyStyle = MaterialTheme.typography.bodySmall
+    val headerStyle = bodyStyle.copy(fontWeight = FontWeight.SemiBold)
+    val density = LocalDensity.current
+
+    // Measured once per table, not per frame: what a cell needs is a property of what is
+    // in it, and neither the text nor the style changes while the table is on screen.
+    // Density is a key because zoom is applied as one, so the widths follow it.
+    val widths = remember(block, bodyStyle, headerStyle, density.density) {
+        List(block.headers.size) { c ->
+            var widest = measurer.measure(AnnotatedString(block.headers[c]), headerStyle).size.width
+            block.rows.forEach { row ->
+                row.getOrNull(c)?.let { cell ->
+                    val w = measurer.measure(inline(cell, a, link), bodyStyle).size.width
+                    if (w > widest) widest = w
+                }
+            }
+            (with(density) { widest.toDp() } + TABLE_CELL_PADDING * 2)
+                .coerceIn(TABLE_COLUMN_MIN, TABLE_COLUMN_MAX)
+        }
+    }
+
     Spacer(Modifier.height(10.dp))
     Box(
         Modifier
@@ -186,7 +221,11 @@ private fun TableBlock(block: MdBlock.Table) {
                     TableCell(
                         text = AnnotatedString(header),
                         align = block.alignments.getOrElse(i) { MdAlign.START },
-                        color = MaterialTheme.colorScheme.primary,
+                        // A header is the strongest text in the table, not a link. In the
+                        // accent it read as one, and left nothing to tell an actual link
+                        // in a cell apart from the heading above it.
+                        color = TextHigh,
+                        width = widths.getOrElse(i) { TABLE_COLUMN_MIN },
                         weight = FontWeight.SemiBold,
                     )
                 }
@@ -197,9 +236,10 @@ private fun TableBlock(block: MdBlock.Table) {
                 Row(Modifier.background(if (rowIndex % 2 == 1) InkRaised else Color.Transparent)) {
                     row.forEachIndexed { i, cell ->
                         TableCell(
-                            text = inline(cell, a, MaterialTheme.colorScheme.primary),
+                            text = inline(cell, a, link),
                             align = block.alignments.getOrElse(i) { MdAlign.START },
                             color = TextMid,
+                            width = widths.getOrElse(i) { TABLE_COLUMN_MIN },
                         )
                     }
                 }
@@ -217,6 +257,7 @@ private fun TableCell(
     text: AnnotatedString,
     align: MdAlign,
     color: Color,
+    width: Dp,
     weight: FontWeight = FontWeight.Normal,
 ) {
     Text(
@@ -230,8 +271,8 @@ private fun TableCell(
             MdAlign.END -> TextAlign.End
         },
         modifier = Modifier
-            .width(TABLE_COLUMN_WIDTH)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .width(width)
+            .padding(horizontal = TABLE_CELL_PADDING, vertical = 10.dp),
     )
 }
 
