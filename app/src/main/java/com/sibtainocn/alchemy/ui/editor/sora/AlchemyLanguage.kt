@@ -161,8 +161,14 @@ class SoraSpanSink(length: Int) : TokenSink {
             }
             column++
         }
-        // A file whose last line is empty still needs that line to exist.
-        spans.addIfNeeded(line, column, styleOf(0))
+        // Every line has to exist in the structure, and most of them never asked for a
+        // span of their own. `addIfNeeded` adds nothing when the style has not changed -
+        // not even the line - so a document with one uniform style, which is exactly what
+        // a file past the highlighting cap is, would build a single line and then be asked
+        // to draw its ten thousandth. `determine` fills the gap by carrying the last span
+        // down, and `addNormalIfNull` covers an empty document.
+        spans.determine(line)
+        spans.addNormalIfNull()
         return Styles(spans.build())
     }
 

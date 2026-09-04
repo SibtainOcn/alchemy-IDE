@@ -348,6 +348,7 @@ fun EditorScreen(
                             readOnly = vm.readOnly,
                             onChanged = vm::onContentChanged,
                             onCaret = vm::onCaret,
+                            onFontSize = vm::setFontSize,
                             onReady = { editor = it },
                             modifier = Modifier.fillMaxSize(),
                         )

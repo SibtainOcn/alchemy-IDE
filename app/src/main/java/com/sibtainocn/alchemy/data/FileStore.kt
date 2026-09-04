@@ -24,8 +24,21 @@ class AccessDenied(val target: File, val action: String) :
  */
 object FileStore {
 
-    /** Above this size a file opens read-only; a TextField cannot carry it comfortably. */
-    const val EDIT_LIMIT_BYTES = 2L * 1024 * 1024
+    /**
+     * Above this size a file opens read-only.
+     *
+     * It was 2 MB because the whole document went into one text field and one text layout,
+     * so everything cost what the file was long. The editor draws only the lines on screen
+     * now, and a 3.17 MB Python file measured on a mid-range phone scrolls at a worst
+     * frame of 42ms - two dropped frames, against six *seconds* for a 125 KB file under
+     * the old arrangement.
+     *
+     * So this is now about memory rather than about drawing: the text is read into a
+     * string and then into the buffer, so a file costs a few times its own size while it
+     * is open. Four megabytes is comfortably past what was measured and comfortably short
+     * of a heap that a cheap phone would struggle with.
+     */
+    const val EDIT_LIMIT_BYTES = 4L * 1024 * 1024
 
     /** Hard ceiling for reading at all. */
     private const val OPEN_LIMIT_BYTES = 16L * 1024 * 1024

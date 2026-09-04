@@ -10,6 +10,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.sibtainocn.alchemy.data.Language
 import io.github.rosemoe.sora.event.ContentChangeEvent
 import io.github.rosemoe.sora.event.SelectionChangeEvent
+import io.github.rosemoe.sora.event.TextSizeChangeEvent
 import io.github.rosemoe.sora.text.Content
 import io.github.rosemoe.sora.widget.CodeEditor
 
@@ -40,6 +41,8 @@ fun SoraCodeField(
     readOnly: Boolean,
     onChanged: () -> Unit,
     onCaret: (Caret) -> Unit,
+    /** The editor pinch-zooms itself; this is how that gets back to the setting. */
+    onFontSize: (Int) -> Unit,
     /** Handed the view once, so the screen can send it commands the key bar produces. */
     onReady: (CodeEditor) -> Unit,
     modifier: Modifier = Modifier,
@@ -49,6 +52,7 @@ fun SoraCodeField(
     val changed by rememberUpdatedState(onChanged)
     val caret by rememberUpdatedState(onCaret)
     val ready by rememberUpdatedState(onReady)
+    val fontSize by rememberUpdatedState(onFontSize)
 
     val scheme = remember(palette) { palette.toColorScheme() }
     val editorLanguage = remember(language, autoPair) { AlchemyLanguage(language, autoPair) }
@@ -69,6 +73,12 @@ fun SoraCodeField(
                         )
                     )
                 }
+                subscribeEvent(TextSizeChangeEvent::class.java) { event, _ ->
+                    // Pinch-to-zoom is the editor's own, and it changes the size behind
+                    // the setting's back. Reporting it keeps the two agreeing, and stops
+                    // the next recomposition snapping the zoom away again.
+                    fontSize((event.newTextSize / resources.displayMetrics.scaledDensity).toInt())
+                }
                 ready(this)
             }
         },
@@ -81,7 +91,12 @@ fun SoraCodeField(
             }
             editor.setEditorLanguage(editorLanguage)
             editor.setColorScheme(scheme)
-            editor.setTextSize(fontSizeSp.toFloat())
+            // Only when it actually differs: writing it back unconditionally would undo
+            // a pinch-zoom on every recomposition.
+            val wantedPx = fontSizeSp * editor.resources.displayMetrics.scaledDensity
+            if (kotlin.math.abs(editor.textSizePx - wantedPx) > 0.5f) {
+                editor.setTextSize(fontSizeSp.toFloat())
+            }
             editor.setWordwrap(wordWrap)
             editor.setLineNumberEnabled(lineNumbers)
             editor.setEditable(!readOnly)
