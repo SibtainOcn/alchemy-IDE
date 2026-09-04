@@ -1,10 +1,6 @@
 package com.sibtainocn.alchemy.syntax
 
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
 import com.sibtainocn.alchemy.data.Language
 import com.sibtainocn.alchemy.ui.theme.AlchemyAccents
 
@@ -127,46 +123,29 @@ object Highlighter {
      * white numerics, orange string bodies, red library calls, cyan braces - layered on
      * top of Monokai. Every other language uses Monokai unmodified.
      */
-    private fun accentsFor(lang: Language, a: AlchemyAccents): AlchemyAccents = when (lang) {
-        Language.C_LIKE -> a.copy(
-            number = Color(0xFFF9F5F5),
-            string = Color(0xFFFF8C00),
-            builtin = Color(0xFFFF4036),
-            brace = Color(0xFF00FFFF),
-        )
-        else -> a
-    }
-
-    fun highlight(text: String, lang: Language, accents: AlchemyAccents): AnnotatedString {
-        if (text.length > MAX_HIGHLIGHT_CHARS) return AnnotatedString(text)
-        val a = accentsFor(lang, accents)
-        return when (lang) {
-            Language.JSON -> AnnotatedString.Builder(text).also { scanJson(text, it, a) }.toAnnotatedString()
-            Language.XML -> AnnotatedString.Builder(text).also { scanXml(text, it, a) }.toAnnotatedString()
-            Language.MARKDOWN -> AnnotatedString.Builder(text).also { scanMarkdown(text, it, a) }.toAnnotatedString()
-            Language.PLAIN -> AnnotatedString(text)
-            else -> AnnotatedString.Builder(text)
-                .also { scanCode(text, specFor(lang), it, a) }
-                .toAnnotatedString()
+    /**
+     * Scans [text] and reports every run to [sink]. Nothing here knows what a colour is.
+     *
+     * Text past [MAX_HIGHLIGHT_CHARS] is left alone: at that size the scan costs more
+     * than the colour is worth, and the caller draws it plain.
+     */
+    fun scan(text: String, lang: Language, sink: TokenSink) {
+        if (text.length > MAX_HIGHLIGHT_CHARS) return
+        when (lang) {
+            Language.JSON -> scanJson(text, sink)
+            Language.XML -> scanXml(text, sink)
+            Language.MARKDOWN -> scanMarkdown(text, sink)
+            Language.PLAIN -> Unit
+            else -> scanCode(text, specFor(lang), sink)
         }
     }
 
-    private fun AnnotatedString.Builder.paint(
-        start: Int,
-        end: Int,
-        color: Color,
-        italic: Boolean = false,
-        bold: Boolean = false,
-    ) {
-        if (end <= start) return
-        addStyle(
-            SpanStyle(
-                color = color,
-                fontStyle = if (italic) FontStyle.Italic else null,
-                fontWeight = if (bold) FontWeight.Medium else null,
-            ),
-            start, end,
-        )
+    /** [scan] rendered as Compose spans, for the Markdown preview's code blocks. */
+    fun highlight(text: String, lang: Language, accents: AlchemyAccents): AnnotatedString {
+        if (text.length > MAX_HIGHLIGHT_CHARS) return AnnotatedString(text)
+        val sink = AnnotatedStringSink(text, accents, lang)
+        scan(text, lang, sink)
+        return sink.build()
     }
 
     private fun isIdentStart(c: Char) = c.isLetter() || c == '_' || c == '$'
@@ -188,7 +167,7 @@ object Highlighter {
         return if (end > i + 1) text.substring(i + 1, end) else ""
     }
 
-    private fun scanCode(text: String, spec: Spec, b: AnnotatedString.Builder, a: AlchemyAccents) {
+    private fun scanCode(text: String, spec: Spec, b: TokenSink) {
         var i = 0
         val n = text.length
         while (i < n) {
@@ -198,7 +177,7 @@ object Highlighter {
             if (spec.lineComment != null && text.startsWith(spec.lineComment, i)) {
                 var end = text.indexOf('\n', i)
                 if (end < 0) end = n
-                b.paint(i, end, a.comment, italic = true)
+                b.token(i, end, TokenKind.COMMENT, italic = true)
                 i = end
                 continue
             }
@@ -208,7 +187,7 @@ object Highlighter {
             if (block != null && text.startsWith(block.first, i)) {
                 var end = text.indexOf(block.second, i + block.first.length)
                 end = if (end < 0) n else end + block.second.length
-                b.paint(i, end, a.comment, italic = true)
+                b.token(i, end, TokenKind.COMMENT, italic = true)
                 i = end
                 continue
             }
@@ -220,7 +199,7 @@ object Highlighter {
                 val fence = text.substring(i, i + 3)
                 var end = text.indexOf(fence, i + 3)
                 end = if (end < 0) n else end + 3
-                b.paint(i, end, a.string)
+                b.token(i, end, TokenKind.STRING)
                 i = end
                 continue
             }
@@ -240,7 +219,7 @@ object Highlighter {
                     if (d == '\n' && c != '`') break
                     j++
                 }
-                b.paint(start, j.coerceAtMost(n), a.string)
+                b.token(start, j.coerceAtMost(n), TokenKind.STRING)
                 i = j.coerceAtLeast(i + 1)
                 continue
             }
@@ -251,7 +230,7 @@ object Highlighter {
             ) {
                 var j = i + 1
                 while (j < n && (isIdentPart(text[j]) || text[j] == '.')) j++
-                b.paint(i, j, a.decorator)
+                b.token(i, j, TokenKind.DECORATOR)
                 i = j
                 continue
             }
@@ -272,7 +251,7 @@ object Highlighter {
                     if (text[j] == '.' && j + 1 < n && !text[j + 1].isDigit()) break
                     j++
                 }
-                b.paint(i, j, a.number)
+                b.token(i, j, TokenKind.NUMBER)
                 i = j
                 continue
             }
@@ -286,21 +265,23 @@ object Highlighter {
                 val isDefName = prev == "def" || prev == "fun" || prev == "class" || prev == "function"
                 // Monokai puts types and builtins in cyan italic, self/cls in orange italic,
                 // and everything it defines or calls in green.
-                val color = when {
-                    word in spec.keywords -> a.keyword
-                    word == "self" || word == "cls" || word == "this" -> a.selfRef
-                    isDefName -> a.function
+                val kind: TokenKind? = when {
+                    word in spec.keywords -> TokenKind.KEYWORD
+                    word == "self" || word == "cls" || word == "this" -> TokenKind.SELF_REF
+                    isDefName -> TokenKind.FUNCTION
                     // A call wins over the builtin list: Monokai paints print(...) the
                     // same green as any other invocation, and reserves cyan for names
                     // used as types.
-                    peekNonSpace(text, j) == '(' -> a.function
-                    word in spec.builtins -> a.builtin
+                    peekNonSpace(text, j) == '(' -> TokenKind.FUNCTION
+                    word in spec.builtins -> TokenKind.BUILTIN
                     // Leading capital reads as a type in every language here.
-                    word.first().isUpperCase() -> a.builtin
-                    else -> Color.Unspecified
+                    word.first().isUpperCase() -> TokenKind.BUILTIN
+                    // Not one of the kinds worth naming: left as ordinary text rather
+                    // than reported, so the sink has nothing to draw over.
+                    else -> null
                 }
-                if (color != Color.Unspecified) {
-                    b.paint(i, j, color, italic = color == a.builtin || color == a.selfRef)
+                if (kind != null) {
+                    b.token(i, j, kind, italic = kind == TokenKind.BUILTIN || kind == TokenKind.SELF_REF)
                 }
                 i = j
                 continue
@@ -310,12 +291,12 @@ object Highlighter {
             if (c in "+-*/%=<>!&|^~") {
                 var j = i
                 while (j < n && text[j] in "+-*/%=<>!&|^~") j++
-                b.paint(i, j, a.operator)
+                b.token(i, j, TokenKind.OPERATOR)
                 i = j
                 continue
             }
             if (c in "()[]{},;:.") {
-                b.paint(i, i + 1, if (c == '{' || c == '}') a.brace else a.punctuation)
+                b.token(i, i + 1, if (c == '{' || c == '}') TokenKind.BRACE else TokenKind.PUNCTUATION)
                 i++
                 continue
             }
@@ -324,7 +305,7 @@ object Highlighter {
         }
     }
 
-    private fun scanJson(text: String, b: AnnotatedString.Builder, a: AlchemyAccents) {
+    private fun scanJson(text: String, b: TokenSink) {
         var i = 0
         val n = text.length
         while (i < n) {
@@ -338,37 +319,37 @@ object Highlighter {
                 }
                 // A string followed by a colon is a key, everything else is a value.
                 val isKey = peekNonSpace(text, j) == ':'
-                b.paint(i, j.coerceAtMost(n), if (isKey) a.function else a.string, bold = isKey)
+                b.token(i, j.coerceAtMost(n), if (isKey) TokenKind.FUNCTION else TokenKind.STRING, bold = isKey)
                 i = j.coerceAtLeast(i + 1)
                 continue
             }
             if (c.isDigit() || (c == '-' && i + 1 < n && text[i + 1].isDigit())) {
                 var j = i + 1
                 while (j < n && (text[j].isDigit() || text[j] in ".eE+-")) j++
-                b.paint(i, j, a.number)
+                b.token(i, j, TokenKind.NUMBER)
                 i = j
                 continue
             }
             if (isIdentStart(c)) {
                 var j = i
                 while (j < n && isIdentPart(text[j])) j++
-                if (text.substring(i, j) in setOf("true", "false", "null")) b.paint(i, j, a.keyword)
+                if (text.substring(i, j) in setOf("true", "false", "null")) b.token(i, j, TokenKind.KEYWORD)
                 i = j
                 continue
             }
-            if (c in "{}[],:") b.paint(i, i + 1, a.punctuation)
+            if (c in "{}[],:") b.token(i, i + 1, TokenKind.PUNCTUATION)
             i++
         }
     }
 
-    private fun scanXml(text: String, b: AnnotatedString.Builder, a: AlchemyAccents) {
+    private fun scanXml(text: String, b: TokenSink) {
         var i = 0
         val n = text.length
         while (i < n) {
             if (text.startsWith("<!--", i)) {
                 var end = text.indexOf("-->", i)
                 end = if (end < 0) n else end + 3
-                b.paint(i, end, a.comment, italic = true)
+                b.token(i, end, TokenKind.COMMENT, italic = true)
                 i = end
                 continue
             }
@@ -377,8 +358,8 @@ object Highlighter {
                 if (j < n && (text[j] == '/' || text[j] == '?' || text[j] == '!')) j++
                 val nameStart = j
                 while (j < n && (isIdentPart(text[j]) || text[j] == ':' || text[j] == '-')) j++
-                b.paint(i, nameStart, a.punctuation)
-                b.paint(nameStart, j, a.keyword, bold = true)
+                b.token(i, nameStart, TokenKind.PUNCTUATION)
+                b.token(nameStart, j, TokenKind.KEYWORD, bold = true)
 
                 // Attributes up to the closing angle bracket.
                 while (j < n && text[j] != '>') {
@@ -387,19 +368,19 @@ object Highlighter {
                             val q = text[j]
                             var k = j + 1
                             while (k < n && text[k] != q) k++
-                            b.paint(j, (k + 1).coerceAtMost(n), a.string)
+                            b.token(j, (k + 1).coerceAtMost(n), TokenKind.STRING)
                             j = (k + 1).coerceAtMost(n)
                         }
                         isIdentStart(text[j]) -> {
                             var k = j
                             while (k < n && (isIdentPart(text[k]) || text[k] == ':' || text[k] == '-')) k++
-                            b.paint(j, k, a.builtin)
+                            b.token(j, k, TokenKind.BUILTIN)
                             j = k
                         }
                         else -> j++
                     }
                 }
-                b.paint(j, (j + 1).coerceAtMost(n), a.punctuation)
+                b.token(j, (j + 1).coerceAtMost(n), TokenKind.PUNCTUATION)
                 i = (j + 1).coerceAtMost(n)
                 continue
             }
@@ -408,7 +389,7 @@ object Highlighter {
     }
 
     /** Light touch: enough structure to read raw Markdown, no more. */
-    private fun scanMarkdown(text: String, b: AnnotatedString.Builder, a: AlchemyAccents) {
+    private fun scanMarkdown(text: String, b: TokenSink) {
         var lineStart = 0
         var inFence = false
         while (lineStart < text.length) {
@@ -420,20 +401,20 @@ object Highlighter {
 
             when {
                 trimmed.startsWith("```") -> {
-                    b.paint(lineStart, lineEnd, a.decorator)
+                    b.token(lineStart, lineEnd, TokenKind.DECORATOR)
                     inFence = !inFence
                 }
-                inFence -> b.paint(lineStart, lineEnd, a.string)
-                trimmed.startsWith("#") -> b.paint(lineStart, lineEnd, a.function, bold = true)
-                trimmed.startsWith(">") -> b.paint(lineStart, lineEnd, a.comment, italic = true)
+                inFence -> b.token(lineStart, lineEnd, TokenKind.STRING)
+                trimmed.startsWith("#") -> b.token(lineStart, lineEnd, TokenKind.FUNCTION, bold = true)
+                trimmed.startsWith(">") -> b.token(lineStart, lineEnd, TokenKind.COMMENT, italic = true)
                 trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("+ ") ->
-                    b.paint(lineStart + indent, lineStart + indent + 1, a.keyword, bold = true)
+                    b.token(lineStart + indent, lineStart + indent + 1, TokenKind.KEYWORD, bold = true)
                 trimmed.startsWith("---") || trimmed.startsWith("===") ->
-                    b.paint(lineStart, lineEnd, a.punctuation)
+                    b.token(lineStart, lineEnd, TokenKind.PUNCTUATION)
             }
 
             if (!inFence && !trimmed.startsWith("#")) {
-                markInline(text, lineStart, lineEnd, b, a)
+                markInline(text, lineStart, lineEnd, b)
             }
             lineStart = lineEnd + 1
         }
@@ -443,8 +424,7 @@ object Highlighter {
         text: String,
         from: Int,
         to: Int,
-        b: AnnotatedString.Builder,
-        a: AlchemyAccents,
+        b: TokenSink,
     ) {
         var i = from
         while (i < to) {
@@ -452,7 +432,7 @@ object Highlighter {
                 text[i] == '`' -> {
                     val end = text.indexOf('`', i + 1)
                     if (end in (i + 1) until to) {
-                        b.paint(i, end + 1, a.string)
+                        b.token(i, end + 1, TokenKind.STRING)
                         i = end + 1
                         continue
                     }
@@ -462,7 +442,7 @@ object Highlighter {
                     if (end in (i + 2) until to) {
                         // Bold is weight, not colour. Tinting it cyan made ordinary
                         // emphasised prose look like a symbol.
-                        b.paint(i, end + 2, a.codeText, bold = true)
+                        b.token(i, end + 2, TokenKind.TEXT, bold = true)
                         i = end + 2
                         continue
                     }
@@ -470,7 +450,7 @@ object Highlighter {
                 text[i] == '[' -> {
                     val end = text.indexOf(')', i)
                     if (end in i until to && text.indexOf("](", i).let { it in i until end }) {
-                        b.paint(i, end + 1, a.number)
+                        b.token(i, end + 1, TokenKind.NUMBER)
                         i = end + 1
                         continue
                     }

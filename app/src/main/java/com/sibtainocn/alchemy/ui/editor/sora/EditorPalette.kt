@@ -36,6 +36,7 @@ object CodeSlot {
     const val DECORATOR = 102
     const val SELF_REF = 103
     const val PUNCTUATION = 104
+    const val BRACE = 105
 }
 
 /**
@@ -100,4 +101,5 @@ fun EditorPalette.toColorScheme(): EditorColorScheme = EditorColorScheme().also 
     put(CodeSlot.DECORATOR, accents.decorator)
     put(CodeSlot.SELF_REF, accents.selfRef)
     put(CodeSlot.PUNCTUATION, accents.punctuation)
+    put(CodeSlot.BRACE, accents.brace)
 }

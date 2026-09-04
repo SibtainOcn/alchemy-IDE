@@ -156,6 +156,30 @@ sora's own slots are reused where they mean the same thing. Alchemy's extra cate
 Note this covers the *editor* only. The app chrome is still `darkColorScheme` in
 `ui/theme/Theme.kt` and is a separate piece of work.
 
+### The scanner reports kinds, and two sinks draw them
+
+`Highlighter` used to hand back a Compose `AnnotatedString` with colours already baked in,
+which the editor cannot use and which made a theme change a full rescan. It now has one
+entry point that reports runs to a `TokenSink` as a `TokenKind` — `KEYWORD`, `STRING`,
+`COMMENT` and so on — and knows nothing about colour at all. `Highlighter.kt` imports
+nothing from `androidx.compose.ui.graphics` any more, which is the check that the split is
+real rather than nominal.
+
+Two sinks consume it:
+
+| sink | for | produces |
+|---|---|---|
+| `syntax/AnnotatedStringSink` | the Markdown preview's code blocks | Compose spans |
+| `ui/editor/sora/SoraSpanSink` | the code surface | sora `Styles`, in colour slots |
+
+C's palette — its own numbers, strings, types and brackets — moved out of the scanner and
+into `AlchemyAccents.colorOf(kind, lang)` where the rest of the drawing lives. It was
+previously done by handing the scanner a doctored copy of the accents, which is what forced
+the scanner to know about colours in the first place.
+
+`Highlighter.highlight()` keeps its old signature on top of the new `scan()`, so
+`HighlighterTest` is untouched. `HighlighterScanTest` pins the layer underneath it.
+
 ### `dirty` is tracked so that undoing back to the saved state is clean
 
 The obvious approach — compare the buffer to the saved text on every change — is O(document)
@@ -219,8 +243,8 @@ pins, and the editor's file tree sheet.
 
 | | |
 |---|---|
-| 1 | Dependency in, an `AndroidView` showing a file |
-| 2 | Colour scheme, and the `Highlighter` analyzer adapter |
+| 1 | Dependency in — done. `AndroidView` showing a file — next |
+| 2 | ~~Colour scheme, and the `Highlighter` analyzer adapter~~ — done |
 | 3 | View model on `Content`; save, dirty, tabs, drafts |
 | 4 | KeyBar and the SmartEdit line operations; caret status |
 | 5 | Tests; word wrap, font size, line numbers, read-only |
