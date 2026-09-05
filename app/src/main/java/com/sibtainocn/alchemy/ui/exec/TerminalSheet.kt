@@ -314,12 +314,15 @@ private fun ConsoleRow(line: ConsoleLine, sizeSp: Int) {
             )
         }
 
+        // What the program printed, which is the reason the terminal is open. It was a
+        // step down from the command that produced it, so the output of every successful
+        // run read as less important than the echo of what was typed.
         is ConsoleLine.Output -> Text(
             line.text,
             fontFamily = CodeFont,
             fontSize = body,
             lineHeight = bodyLine,
-            color = TextMid,
+            color = TextHigh,
         )
 
         is ConsoleLine.Error -> Text(

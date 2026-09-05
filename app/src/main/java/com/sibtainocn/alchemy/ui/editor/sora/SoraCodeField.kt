@@ -1,6 +1,8 @@
 package com.sibtainocn.alchemy.ui.editor.sora
 
 import android.graphics.Typeface
+import com.sibtainocn.alchemy.R
+import androidx.core.content.res.ResourcesCompat
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -61,8 +63,13 @@ fun SoraCodeField(
         modifier = modifier,
         factory = { context ->
             CodeEditor(context).apply {
-                setTypefaceText(Typeface.MONOSPACE)
-                setTypefaceLineNumber(Typeface.MONOSPACE)
+                // The same face the previewer and the key bar use. ResourcesCompat
+                // returns null if the asset is ever missing, so the platform monospace
+                // stays as the fallback rather than the editor drawing in a sans face.
+                val code = ResourcesCompat.getFont(context, R.font.jetbrains_mono_regular)
+                    ?: Typeface.MONOSPACE
+                setTypefaceText(code)
+                setTypefaceLineNumber(code)
                 subscribeEvent(ContentChangeEvent::class.java) { _, _ -> changed() }
                 subscribeEvent(SelectionChangeEvent::class.java) { event, _ ->
                     caret(

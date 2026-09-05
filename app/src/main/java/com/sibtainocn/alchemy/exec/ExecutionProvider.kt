@@ -55,6 +55,19 @@ interface ExecutionProvider {
     val setupGuide: SetupGuide?
 
     /**
+     * Whether one setup step is satisfied, checked on its own.
+     *
+     * The setup screen runs these in order and shows an answer per step. A single ready
+     * flag was not enough: the handshake that proves the runner is answering says nothing
+     * about whether it can see the user's files, so the screen used to report success with
+     * two of its three instructions still undone.
+     *
+     * Returns null when the step is real but cannot be established from here, which the
+     * screen shows as advice rather than as a tick or a cross.
+     */
+    suspend fun verifyStep(id: String): Boolean?
+
+    /**
      * The permission the user has to grant before anything can be asked of the runner, or
      * null when the runner needs none.
      */

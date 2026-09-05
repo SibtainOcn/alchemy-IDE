@@ -140,12 +140,22 @@ object Termux {
      */
     const val GRANT_STORAGE = "termux-setup-storage"
 
+    /** Step ids, so the provider knows which check belongs to which row. */
+    const val STEP_INSTALL = "install"
+    const val STEP_PERMISSION = "permission"
+    const val STEP_EXTERNAL = "external-apps"
+    const val STEP_STORAGE = "storage"
+
+    /** Created by [GRANT_STORAGE], and the cheapest proof that it has been run. */
+    const val STORAGE_DIR = "$HOME/storage"
+
     /**
-     * The two commands, in the order they have to happen, with the reason for each.
+     * Everything that has to be true, in the order it has to become true.
      *
-     * Both are mandatory and neither can be run for the user. The first is the permission
-     * that lets this app ask Termux for anything at all, so until it is set there is no
-     * channel to send the second one down.
+     * Each row is checked on its own. The screen used to report readiness from the
+     * handshake alone, which proves only that Termux answers: somebody who had run the
+     * first command and neither of the others was told they were ready, and then every
+     * run failed on a file that plainly existed.
      */
     val SETUP_GUIDE = SetupGuide(
         runnerName = "Termux",
@@ -154,23 +164,37 @@ object Termux {
             "frozen years behind and cannot take commands from other apps.",
         steps = listOf(
             SetupStep(
+                id = STEP_INSTALL,
+                title = "Install Termux",
+                why = "Alchemy has no shell of its own. Termux provides one.",
+                action = StepAction.Download,
+                onFailure = "Get it from GitHub. The Google Play build cannot take " +
+                    "commands from other apps and cannot be updated into one that can.",
+            ),
+            SetupStep(
+                id = STEP_PERMISSION,
+                title = "Allow Alchemy to talk to Termux",
+                why = "Android asks you once. Nothing runs without it.",
+                action = StepAction.GrantPermission,
+            ),
+            SetupStep(
+                id = STEP_EXTERNAL,
                 title = "Let Termux take commands",
-                why = "Termux ignores other apps until this is switched on. It prints " +
-                    "\"done\" when it worked. Safe to run again at any time.",
+                why = "Termux ignores other apps until this is switched on. Safe to run " +
+                    "again at any time.",
                 command = ENABLE_EXTERNAL_APPS,
+                onFailure = "Still not answering. Run the line again, then close Termux " +
+                    "from recent apps and reopen it: the service that takes commands " +
+                    "sometimes holds the old setting until Termux is started fresh.",
             ),
             SetupStep(
+                id = STEP_STORAGE,
                 title = "Give Termux access to your files",
-                why = "Your code lives in shared storage and Termux starts out able to " +
-                    "see only its own. Android will ask you to allow it.",
+                why = "Your code is in shared storage and Termux starts out able to see " +
+                    "only its own. Android will ask you to allow it.",
                 command = GRANT_STORAGE,
-            ),
-            SetupStep(
-                title = "Close Termux completely, then reopen it",
-                why = "Swipe it out of recent apps. Reloading the settings is usually " +
-                    "enough, but the service that takes commands sometimes keeps the old " +
-                    "answer until Termux is started fresh.",
-                command = "exit",
+                onFailure = "Termux still cannot reach your files. Run the line and " +
+                    "accept the permission dialog Termux raises.",
             ),
         ),
     )

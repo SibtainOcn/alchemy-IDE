@@ -14,6 +14,8 @@ import com.sibtainocn.alchemy.exec.InstallPlanner
 import com.sibtainocn.alchemy.exec.InstallState
 import com.sibtainocn.alchemy.exec.Readiness
 import com.sibtainocn.alchemy.exec.Runtime
+import com.sibtainocn.alchemy.exec.StepStatus
+import com.sibtainocn.alchemy.exec.SetupStep
 import kotlinx.coroutines.launch
 
 /**
@@ -39,6 +41,29 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
 
     var checking by mutableStateOf(false)
         private set
+
+    /** The setup rows, in order. Empty when this build has nothing to set up. */
+    val steps: List<SetupStep> get() = guide?.steps.orEmpty()
+
+    /**
+     * Where each row stands, keyed by step id.
+     *
+     * Written as each answer lands rather than in one go at the end, so the list fills in
+     * from the top instead of sitting blank for the length of the slowest probe.
+     */
+    var stepStates by mutableStateOf(emptyMap<String, StepStatus>())
+        private set
+
+    /** Every row confirmed done. The only thing that may say setup is finished. */
+    val allStepsDone: Boolean
+        get() = steps.isNotEmpty() && steps.all { stepStates[it.id] == StepStatus.Done }
+
+    /** How many rows are confirmed, for the counter in the header. */
+    val stepsDone: Int get() = steps.count { stepStates[it.id] == StepStatus.Done }
+
+    /** The first row that is not done, which is the one worth acting on. */
+    val firstIncomplete: SetupStep?
+        get() = steps.firstOrNull { stepStates[it.id] != StepStatus.Done }
 
     /** Runtimes found on PATH. Empty until the runner itself is ready. */
     var present by mutableStateOf(emptySet<Runtime>())
@@ -104,6 +129,54 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
                 emptySet()
             }
             installStates = present.associateWith { InstallState.AlreadyInstalled }
+            checking = false
+        }
+    }
+
+    /**
+     * Runs the setup checklist top to bottom, publishing each answer as it arrives.
+     *
+     * Sequential rather than parallel, and it stops asking once a row fails. The rows are
+     * a chain: there is no point probing whether the runner can see shared storage when
+     * the channel that would carry the question is not open, and an answer of "failed"
+     * there would send somebody to fix the wrong thing. Rows after a failure are marked
+     * [StepStatus.Blocked] instead.
+     */
+    fun recheck() {
+        if (checking || installing) return
+        val rows = steps
+        if (rows.isEmpty()) return
+
+        checking = true
+        stepStates = rows.associate { it.id to StepStatus.Pending }
+
+        viewModelScope.launch {
+            var blocked = false
+            for (step in rows) {
+                if (blocked) {
+                    stepStates = stepStates + (step.id to StepStatus.Blocked)
+                    continue
+                }
+                stepStates = stepStates + (step.id to StepStatus.Checking)
+                val ok = runCatching { provider.verifyStep(step.id) }.getOrNull()
+                val status = when (ok) {
+                    true -> StepStatus.Done
+                    false -> StepStatus.Failed
+                    // Not answerable from here. Treated as satisfied so it cannot block
+                    // the rows below, and drawn as advice rather than as a tick.
+                    null -> StepStatus.Done
+                }
+                stepStates = stepStates + (step.id to status)
+                if (status == StepStatus.Failed) blocked = true
+            }
+
+            // Keep the ladder in step with the checklist, since the rest of the app still
+            // asks the ladder rather than the rows.
+            readiness = provider.readiness()
+            if (allStepsDone) {
+                present = Runtime.entries.filter { provider.isInstalled(it) }.toSet()
+                installStates = present.associateWith { InstallState.AlreadyInstalled }
+            }
             checking = false
         }
     }

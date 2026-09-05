@@ -8,6 +8,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [1.1.3] - 2026-09-05
 
 ### Fixed
+- **The terminal setup screen no longer says it is ready when it is not.** Readiness was
+  measured by one handshake, which proves only that the terminal app answers. Somebody who
+  had run the first of the three instructions and neither of the others was told everything
+  was in place, and then every run failed on a file that plainly existed. It is a checklist
+  now: install, permission, take commands, reach your files, each verified separately and
+  each showing its own answer. The rows are checked in order and the run stops at the first
+  failure, so nothing below a real problem is reported as broken too.
+- **Program output in the terminal is no longer dimmer than the prompt above it.** It was
+  drawn a step down from the command that produced it, which made the result of every
+  successful run read as an aside.
+
 - **A long file no longer freezes the app when it is opened or scrolled.** The line-number
   gutter drew every line in the file on every frame, not the forty on screen, and measured
   the numbers it had no room to cache while it was drawing them. On a two thousand line
@@ -112,6 +123,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - **`Home` goes to the start of the line.** It used to toggle between the first non-space
   character and column zero. The editor's own line-start movement does not, and the
   toggle was not worth reimplementing on top of it.
+
+- **The setup screen is a checklist rather than a wall.** Numbered rows with a live status
+  each, a progress track in the header, commands set in the code face at a size they can be
+  read at against near black, and a copy button that says Copied when it has. The buttons
+  answer to what was found: while something is outstanding it offers Check again, and when
+  every row passes it offers one button that says Done. It previously offered Check again,
+  Open Termux and Not now to somebody who had just been told they were ready.
+- **Code is set in JetBrains Mono.** The editor, the gutter, the terminal, the previewer
+  and the setup commands all used the platform's monospace, which varies by vendor and
+  draws 0 like O and 1 like l. Bundled rather than downloaded, under the SIL Open Font
+  License, which is compatible with the GPL.
+- **The command history file always has something in it.** An empty file opened in the
+  editor is indistinguishable from a button that did nothing, so it carries a note when
+  there is no history yet. Lines opening with `#` are not offered back as commands, so the
+  note, and anything written next to it, stays out of the recall list.
 
 - **A file can be edited up to four megabytes rather than two.** Editing is no longer
   bounded by what a Compose text field could lay out, so the limit is about memory now:

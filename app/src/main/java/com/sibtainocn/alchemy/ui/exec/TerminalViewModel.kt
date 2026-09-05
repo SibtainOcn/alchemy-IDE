@@ -110,6 +110,13 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
      * is a text editor, and everything the editor already does with a file, from scrolling
      * to selecting to searching, is what someone looking at their own history wants.
      */
+    /**
+     * The history file, ready to be opened.
+     *
+     * Prepared here rather than by the caller so the editor is never handed a path that
+     * does not exist yet. The write is small and only ever happens on a file that is
+     * missing or empty.
+     */
     fun historyFile(): File = stored.ensureExists()
 
     /** Forgets everything typed, on disk and in the walk-back. */
