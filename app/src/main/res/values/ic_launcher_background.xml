@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The app's own page colour, not pure black: on a black launcher wallpaper an icon
-         drawn on #000000 has no edge at all and reads as a floating letter. -->
-    <color name="ic_launcher_background">#0A0A0A</color>
+    <!--
+        The background layer of the adaptive icon. The foreground is transparent, so this
+        is what the launcher's mask is filled with.
+    -->
+    <color name="ic_launcher_background">#000000</color>
 </resources>

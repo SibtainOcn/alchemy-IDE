@@ -100,6 +100,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   four megabytes to edit, sixteen to open read-only.
 
 ### Added
+- **A launcher icon built from the brand mark.** Adaptive, so the launcher masks it into
+  whatever shape the device uses rather than showing a rectangle inside that shape: the
+  foreground is the mark on transparency, sized inside the 66dp safe zone, over a black
+  background layer. Ships a themed variant for Android 13, which the launcher tints
+  itself, and plain square and round bitmaps for API 24 and 25, which have no adaptive
+  icons at all.
+- **The GPL-3 text is in the repository.** The README's badge and its licence section both
+  pointed at a `LICENSE` that was not there. Taken verbatim from gnu.org.
+
 - **Alchemy is offered for code files sent from other apps, and opens them directly.**
   It previously claimed only `text/*`, which is not what a file manager sends: Android's
   own type table reports most source extensions as `application/octet-stream`, so a `.kt`
@@ -107,9 +116,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   `text/` as well, and claims `octet-stream` bounded by 57 source extensions rather than
   outright, so it is not offered as a handler for every unknown binary on the device.
   Files arriving as `content://` are resolved through the external storage, downloads and
-  media providers rather than only the first of those. A launch that carries a file skips
-  the brand splash, and the activity is `singleTask`, so opening a second file while
-  Alchemy is running reuses the running editor instead of building another one.
+  media providers rather than only the first of those. The activity is `singleTask`, so
+  opening a second file while Alchemy is running reuses the running editor instead of
+  building another one, rather than paying for a second activity, theme inflation and
+  first composition.
 - **Reading a large file reports how far it has got.** Above 256 KB the file is decoded in
   64 KB chunks and the loader shows the name, the size and a percentage taken from bytes
   actually consumed off the stream. The chunked path is also interruptible, so backing out

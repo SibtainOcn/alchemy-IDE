@@ -79,9 +79,7 @@ class MainActivity : ComponentActivity() {
             AlchemyTheme {
                 CompositionLocalProvider(LocalAccents provides AlchemyAccents()) {
                     LaunchedEffect(Unit) { ready = true }
-                    // The brand splash is a fixed delay, so it is skipped when the launch
-                    // already has a destination.
-                    AlchemyApp(incoming, brandFirst = startFile == null)
+                    AlchemyApp(incoming)
                 }
             }
         }
@@ -95,7 +93,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AlchemyApp(incoming: State<File?>, brandFirst: Boolean) {
+private fun AlchemyApp(incoming: State<File?>) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val startFile = incoming.value
@@ -111,7 +109,7 @@ private fun AlchemyApp(incoming: State<File?>, brandFirst: Boolean) {
     LaunchedEffect(Unit) { CrashGuard.clear(context) }
 
     var hasAccess by remember { mutableStateOf(Storage.hasAccess(context)) }
-    var booting by remember { mutableStateOf(brandFirst) }
+    var booting by remember { mutableStateOf(true) }
     var openPath by rememberSaveable { mutableStateOf(startFile?.absolutePath) }
 
     // Subsequent intents arrive through onNewIntent on the same activity, so the file is
@@ -148,12 +146,10 @@ private fun AlchemyApp(incoming: State<File?>, brandFirst: Boolean) {
 
     LaunchedEffect(Unit) {
         // One pass of the shine, then the app. The system splash is released on the first
-        // frame, so this is the whole of the opening. Not entered at all when the launch
-        // carried a file.
-        if (booting) {
-            delay(SPLASH_MS.toLong())
-            booting = false
-        }
+        // frame, so this is the whole of the opening, and it runs for a launch that carries
+        // a file as well as for a plain one.
+        delay(SPLASH_MS.toLong())
+        booting = false
     }
 
     crash?.let { report ->
