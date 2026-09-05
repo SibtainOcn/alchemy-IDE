@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- Pre-Android 12 splash falls back to a plain black window with the mark centred. -->
+    <!--
+        The starting window, drawn by the system before the process has a first frame.
+
+        The icon is the adaptive icon's own foreground layer rather than a second copy of
+        the mark, so the two cannot drift apart. Its art sits inside 61% of its canvas,
+        which is within the 2/3 the splash screen keeps clear, so nothing is clipped.
+    -->
     <style name="Theme.Alchemy.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">#000000</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_mark</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
         <item name="postSplashScreenTheme">@style/Theme.Alchemy</item>
     </style>
 

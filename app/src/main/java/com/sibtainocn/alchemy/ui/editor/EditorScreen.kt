@@ -57,6 +57,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -67,6 +68,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sibtainocn.alchemy.data.ExternalOpen
 import com.sibtainocn.alchemy.data.Language
 import com.sibtainocn.alchemy.ui.common.ConfirmDialog
 import com.sibtainocn.alchemy.ui.common.EmptyState
@@ -118,6 +120,7 @@ fun EditorScreen(
     onOpenFile: (File) -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
+    val context = LocalContext.current
     val copyToClipboard = rememberCopyToClipboard()
     val pasteFromClipboard = rememberPasteFromClipboard()
 
@@ -336,6 +339,14 @@ fun EditorScreen(
                         "Cannot open this file",
                         vm.message ?: "It is not text, or it is not readable.",
                         Ico.Info,
+                        actionLabel = "Open with another app",
+                        onAction = {
+                            if (!ExternalOpen.open(context, file)) {
+                                scope.launch {
+                                    snackbar.showSnackbar("No app on this device opens ${file.name}")
+                                }
+                            }
+                        },
                     )
                     mode == ViewMode.PREVIEW -> MarkdownView(
                         preview.of(vm.content, vm.revision),

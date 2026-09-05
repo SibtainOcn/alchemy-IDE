@@ -208,5 +208,20 @@
                 <data android:pathPattern=".*\\..*\\.vue" />
             </intent-filter>
         </activity>
+
+        <!--
+            Grants read access to one file at a time when it is handed to another app.
+            Since API 24 the platform throws FileUriExposedException for a file:// URI
+            crossing to another process, so a content:// URI is required.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

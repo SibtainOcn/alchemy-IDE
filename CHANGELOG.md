@@ -95,17 +95,54 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - **The splash is on screen for 1.1 seconds rather than 1.5.** One pass of the shine is
   the whole of it, and the pass was longer than it needed to be.
 
+- **Undo covers what you actually did.** The buffer is the editor's own, so undo spans as
+  many lines as an edit touched instead of stopping at one, and a block indent or a
+  comment toggle comes back in one step. Undoing back to the text that is on disk also
+  clears the unsaved marker, which it did not before: the file and the buffer agree again,
+  so saying otherwise was simply wrong.
+- **Colours are named once, in one place.** The highlighter reports what a token *is*
+  rather than what colour it should be, and a single palette turns those into colours for
+  both the editor and the Markdown preview. Nothing user-visible changes today; it is what
+  makes a light theme, or any other, a palette rather than a rewrite.
+- **Release builds number themselves one at a time.** `versionCode` was the repository's
+  commit count, so it moved by however many commits a release happened to contain. It is
+  now one per release. It continues from where the old scheme left off rather than
+  restarting, because a version code may never go backwards: v1.1.3 shipped as 54, so the
+  next release is 55.
+- **`Home` goes to the start of the line.** It used to toggle between the first non-space
+  character and column zero. The editor's own line-start movement does not, and the
+  toggle was not worth reimplementing on top of it.
+
 - **A file can be edited up to four megabytes rather than two.** Editing is no longer
   bounded by what a Compose text field could lay out, so the limit is about memory now:
   four megabytes to edit, sixteen to open read-only.
 
 ### Added
+- **Files Alchemy does not edit open in the app that does.** Tapping a picture, a video,
+  an archive, a PDF or an installer hands it to whatever the device already opens it with,
+  instead of loading it and reporting that it is not text. Text and source still open in
+  the editor, and when something with a text-shaped name turns out to be binary anyway,
+  a `.docx` being the common case, the editor offers the same hand-off rather than
+  stopping at the message. The file is passed as a `content://` URI through a
+  `FileProvider`, read-only and for as long as the receiving app is on screen, because
+  since API 24 a `file://` URI crossing to another process throws.
+
+- **Auto-pairing, and block edits that know what a line is.** Typing an opening bracket or
+  quote closes it and puts the caret between the halves; Enter after a line that opens a
+  block indents the new line to match. The key bar indents, dedents and toggles comments
+  across a whole selection, duplicates a line and deletes one, each as a single undo step
+  rather than as the several edits it is made of.
+- **The mark on the launch screen is the app icon.** The starting window drew its own
+  copy of the old letter A, which no longer matched anything.
+
 - **A launcher icon built from the brand mark.** Adaptive, so the launcher masks it into
   whatever shape the device uses rather than showing a rectangle inside that shape: the
-  foreground is the mark on transparency, sized inside the 66dp safe zone, over a black
-  background layer. Ships a themed variant for Android 13, which the launcher tints
+  foreground is the mark on transparency, sized inside the 66dp safe zone, over a near
+  black background layer. Ships a themed variant for Android 13, which the launcher tints
   itself, and plain square and round bitmaps for API 24 and 25, which have no adaptive
-  icons at all.
+  icons at all. The starting window the system draws before the first frame uses that same
+  foreground layer rather than a second copy of the mark, so the icon on the home screen
+  and the icon on the launch screen cannot drift apart.
 - **The GPL-3 text is in the repository.** The README's badge and its licence section both
   pointed at a `LICENSE` that was not there. Taken verbatim from gnu.org.
 
@@ -136,6 +173,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   device as soon as it has been read rather than when the dialog is dismissed, so it
   cannot survive being swiped away and greet a later launch as though the app had just
   crashed again.
+
+### Documentation
+- `docs/SORA-MIGRATION.md` records the whole migration: why the previous approach could
+  not be made fast, what was built, what was measured, the two draw-thread crashes and
+  why `SafeSpans` is a net rather than a cure, and the gaps left open.
+- `docs/MANUAL-TEST-PLAN.md` lists every check to run by hand, per phase, with expected
+  against actual results.
+- The README has the banner and the assets it points at, and `NOTICE` records sora-editor
+  and the LGPL-2.1 section 3 basis for conveying it under the GPL.
 
 ## [1.1.2] - 2026-09-04
 

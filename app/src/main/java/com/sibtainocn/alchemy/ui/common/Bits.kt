@@ -17,6 +17,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -78,7 +80,14 @@ fun SheetAction(
 }
 
 @Composable
-fun EmptyState(title: String, detail: String, icon: ImageVector? = null) {
+fun EmptyState(
+    title: String,
+    detail: String,
+    icon: ImageVector? = null,
+    /** Optional way out of the state, shown under the detail when both are given. */
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -102,6 +111,10 @@ fun EmptyState(title: String, detail: String, icon: ImageVector? = null) {
                 color = TextLow,
                 textAlign = TextAlign.Center,
             )
+            if (actionLabel != null && onAction != null) {
+                Spacer(Modifier.height(6.dp))
+                FilledTonalButton(onClick = onAction) { Text(actionLabel) }
+            }
         }
     }
 }
