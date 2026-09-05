@@ -370,7 +370,7 @@ fun EditorScreen(
 
             // The key bar only earns its space while you are actually editing text.
             AnimatedVisibility(
-                visible = editing && !vm.readOnly && !vm.loading,
+                visible = editing && !vm.readOnly && !vm.loading && vm.keyBar,
                 enter = slideInVertically(Motion.offset()) { it } + fadeIn(),
                 exit = slideOutVertically(Motion.offset()) { it } + fadeOut(),
             ) {
@@ -384,6 +384,19 @@ fun EditorScreen(
                         onOrderChange = vm::updateKeyOrder,
                         onOutcome = ::handleKey,
                     )
+                }
+            }
+
+            // Outside the key bar's visibility, because it carries undo and redo: turning
+            // the keys off is a choice about the keys, not about being able to take back
+            // what was typed.
+            AnimatedVisibility(
+                visible = editing && !vm.readOnly && !vm.loading,
+                enter = slideInVertically(Motion.offset()) { it } + fadeIn(),
+                exit = slideOutVertically(Motion.offset()) { it } + fadeOut(),
+            ) {
+                Column {
+                    if (!vm.keyBar) HairlineDivider()
                     CaretStatus(vm, onUndo = { vm.undo() }, onRedo = { vm.redo() })
                 }
             }
@@ -405,6 +418,10 @@ fun EditorScreen(
             },
             onDiscard = {
                 confirmExit = false
+                // The work goes, and the tabs holding it go with it. A strip still listing
+                // a file whose edits were just destroyed is a strip that lies, and the
+                // next prompt would ask about files with nothing left to lose.
+                vm.discardUnsaved()
                 onClose()
             },
             onDismiss = { confirmExit = false },
@@ -502,9 +519,16 @@ private fun CaretStatus(vm: EditorViewModel, onUndo: () -> Unit, onRedo: () -> U
         Modifier
             .fillMaxWidth()
             .background(InkRaised)
-            .padding(start = 16.dp, end = 6.dp, top = 1.dp, bottom = 1.dp),
+            .padding(start = 4.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Left, where a thumb holding the phone already is. On the right they were sharing
+        // the corner with the navigation gesture area and were the last thing reached on a
+        // row that is otherwise only read.
+        StatusIcon(Ico.Undo, "Undo", enabled = vm.canUndo, onClick = onUndo)
+        StatusIcon(Ico.Redo, "Redo", enabled = vm.canRedo, onClick = onRedo)
+
+        Spacer(Modifier.width(8.dp))
         Text(
             "Ln $line, Col $col" + if (selected > 0) "   ($selected selected)" else "",
             fontFamily = CodeFont,
@@ -518,17 +542,15 @@ private fun CaretStatus(vm: EditorViewModel, onUndo: () -> Unit, onRedo: () -> U
             fontSize = 11.sp,
             color = if (vm.autoPair) accents.gutterActive.copy(alpha = 0.7f) else accents.comment,
         )
-        StatusIcon(Ico.Undo, "Undo", enabled = vm.canUndo, onClick = onUndo)
-        StatusIcon(Ico.Redo, "Redo", enabled = vm.canRedo, onClick = onRedo)
     }
 }
 
 /**
  * A control sized for the status row rather than for the bar.
  *
- * Smaller than [BarIcon] because the row it sits in is a readout, and a full-height button
- * in it would make the row a second toolbar. Still 34dp of touch target, which is what a
- * thumb resting on the keyboard needs.
+ * Shorter than [BarIcon], since the row it sits in is a readout rather than a toolbar, but
+ * not small: 40dp is the platform's minimum for something a thumb is expected to hit, and
+ * these two are hit more than anything else in the editor.
  */
 @Composable
 private fun StatusIcon(
@@ -539,8 +561,7 @@ private fun StatusIcon(
 ) {
     Box(
         Modifier
-            .padding(start = 2.dp)
-            .size(34.dp)
+            .size(width = 42.dp, height = 34.dp)
             .clip(RoundedCornerShape(Radii.xs))
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -548,8 +569,8 @@ private fun StatusIcon(
         Icon(
             icon,
             label,
-            Modifier.size(17.dp),
-            tint = if (enabled) TextHigh else TextLow.copy(alpha = 0.35f),
+            Modifier.size(20.dp),
+            tint = if (enabled) TextHigh else TextLow.copy(alpha = 0.3f),
         )
     }
 }
@@ -707,6 +728,7 @@ private fun EditorMenu(
         MenuToggleRow(Ico.Wrap, "Word wrap", vm.wordWrap) { vm.toggleWrap() }
         MenuToggleRow(Ico.Numbers, "Line numbers", vm.lineNumbers) { vm.toggleLineNumbers() }
         MenuToggleRow(Ico.Code, "Auto-pair", vm.autoPair) { vm.toggleAutoPair() }
+        MenuToggleRow(Ico.Hash, "Key bar", vm.keyBar) { vm.toggleKeyBar() }
 
         HairlineDivider(Modifier.padding(vertical = 4.dp))
         // Reading a rendered page and editing its source are sized by different questions,

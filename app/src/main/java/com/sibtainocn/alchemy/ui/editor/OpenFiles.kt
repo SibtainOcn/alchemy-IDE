@@ -1,6 +1,7 @@
 package com.sibtainocn.alchemy.ui.editor
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,10 +24,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sibtainocn.alchemy.ui.common.Ico
+import com.sibtainocn.alchemy.ui.theme.Hairline
 import com.sibtainocn.alchemy.ui.theme.InkHigh
 import com.sibtainocn.alchemy.ui.theme.InkRaised
 import com.sibtainocn.alchemy.ui.theme.Radii
@@ -44,9 +45,8 @@ import java.io.File
  * explorer passes no [current], and then no tab is drawn as selected.
  *
  * Reduced to the two things a tab is for on a phone: getting back to a file, and getting
- * rid of one. No glyph, no path, no close-others menu. A file with unwritten edits shows
- * a dot where its cross would be, which is the one piece of state a tab has to carry and
- * the one place there is room to put it.
+ * rid of one. No glyph, no path, no close-others menu. A file with unwritten edits carries
+ * a dot in front of its name, which is the one piece of state a tab has to hold.
  */
 @Composable
 fun OpenFilesStrip(
@@ -71,8 +71,8 @@ fun OpenFilesStrip(
     LazyRow(
         state = scroll,
         modifier = modifier.fillMaxWidth().background(InkRaised),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 7.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         items(tabs, key = { it.absolutePath }) { tab ->
             Tab(
@@ -97,38 +97,56 @@ private fun Tab(
     Row(
         Modifier
             .clip(RoundedCornerShape(Radii.xs))
-            .background(if (active) InkHigh else Color.Transparent)
+            .background(if (active) InkHigh else InkRaised)
+            // A tab that is only a background tint is hard to pick out of a strip of
+            // them on a dark theme; the current one is outlined as well.
+            .border(
+                width = if (active) 1.dp else 0.7.dp,
+                color = if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                else Hairline,
+                shape = RoundedCornerShape(Radii.xs),
+            )
             .clickable(onClick = onSelect)
-            .padding(start = 11.dp, end = 3.dp),
+            .padding(start = 13.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // A dot in front rather than in place of the cross, so the state and the way out
+        // of it are two different targets: closing a tab used to mean pressing the mark
+        // that says it has unsaved work, which is the last thing anyone wants to poke.
+        if (unsaved) {
+            Box(
+                Modifier
+                    .padding(end = 8.dp)
+                    .size(7.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+            )
+        }
         Text(
             file.name,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyMedium,
             color = if (active) TextHigh else TextMid,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            // Long enough for a real filename, short enough that three tabs still fit on
-            // a phone before anything has to be scrolled to.
-            modifier = Modifier.widthIn(max = 150.dp),
+            // Long enough for a real filename, short enough that two tabs and the start of
+            // a third still fit on a phone.
+            modifier = Modifier.widthIn(max = 168.dp),
         )
         Box(
             Modifier
-                .padding(start = 3.dp)
-                .size(26.dp)
+                .padding(start = 4.dp)
+                // Was 26dp around a 12dp cross, which is under the platform's own floor
+                // for something meant to be tapped and was being missed.
+                .size(36.dp)
                 .clip(CircleShape)
                 .clickable(onClick = onClose),
             contentAlignment = Alignment.Center,
         ) {
-            if (unsaved) {
-                Box(
-                    Modifier
-                        .size(7.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
-                )
-            } else {
-                Icon(Ico.Close, "Close " + file.name, Modifier.size(12.dp), tint = TextLow)
-            }
+            Icon(
+                Ico.Close,
+                "Close " + file.name,
+                Modifier.size(15.dp),
+                tint = if (active) TextMid else TextLow,
+            )
         }
     }
 }

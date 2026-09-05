@@ -303,7 +303,9 @@ fun ExplorerScreen(
                         // the only thing on screen that says so. Tapping it brings the
                         // dialog back rather than doing nothing.
                         busy -> vm.showProgress()
-                        picking -> selectionActions = true
+                        // The check icon exits selection mode. Batch actions are reached
+                        // through the long-press dialog instead.
+                        picking -> vm.setSelecting(false)
                         armed -> vm.paste()
                         else -> creating = true
                     }
@@ -329,7 +331,7 @@ fun ExplorerScreen(
                     label = "fab",
                 ) { mode ->
                     when (mode) {
-                        3 -> Icon(Ico.Check, "What to do with the selection")
+                        3 -> Icon(Ico.Close, "Exit selection")
                         2 -> ShapeLoader(size = 20.dp, color = MaterialTheme.colorScheme.onPrimary)
                         1 -> Icon(Ico.Paste, "Paste here")
                         else -> Icon(Ico.Plus, "New")
@@ -474,13 +476,13 @@ fun ExplorerScreen(
                                 else -> openEntry(e.file)
                             }
                         },
-                        // A long press is what starts a selection everywhere else on the
-                        // platform, and once one is running it is the way back to what can
-                        // be done with it.
+                        // Long-press always shows the options dialog. In selection
+                        // mode it shows batch actions; outside it shows single-item
+                        // actions. Multi-select is entered only from the 3-dot menu
+                        // or the Select row inside the dialog.
                         onHold = { e ->
                             if (state.selecting) selectionActions = true else sheetFor = e
                         },
-                        onHoldSelect = { e -> vm.toggleSelected(e) },
                     )
                 }
             }
@@ -529,6 +531,12 @@ fun ExplorerScreen(
             },
             onShare = if (entry.isDir) null else {
                 { sheetFor = null; shareFiles(listOf(entry.file)) }
+            },
+            // Enters multi-select with this single item pre-selected.
+            onSelect = {
+                sheetFor = null
+                vm.setSelecting(true)
+                vm.toggleSelected(entry)
             },
             onCut = { vm.stage(entry, Transfer.MOVE); sheetFor = null },
             onCopy = { vm.stage(entry, Transfer.COPY); sheetFor = null },
@@ -975,8 +983,6 @@ private fun EntryList(
     onUp: () -> Unit,
     onOpen: (Entry) -> Unit,
     onHold: (Entry) -> Unit,
-    /** A long press outside selection mode, which is how one is started. */
-    onHoldSelect: (Entry) -> Unit,
 ) {
     LazyColumn(
         state = listState,
@@ -993,11 +999,9 @@ private fun EntryList(
                 selecting = selecting,
                 selected = entry.file.absolutePath in selected,
                 onClick = { onOpen(entry) },
-                onLongClick = {
-                    // Press and hold means the same thing it means everywhere else on the
-                    // platform: start picking, with this row picked.
-                    if (selecting) onHold(entry) else onHoldSelect(entry)
-                },
+                // Long-press always shows the options dialog. Multi-select is
+                // entered via the 3-dot menu or the Select row in the dialog.
+                onLongClick = { onHold(entry) },
                 modifier = Modifier.animateItem(
                     fadeInSpec = Motion.standard(),
                     placementSpec = Motion.offset(),
@@ -1073,35 +1077,13 @@ private fun EntryRow(
             .padding(horizontal = 16.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // The icon stays visible in selection mode. Selection is shown by the
+        // row background wash rather than an overlay covering the glyph.
         Box(
             Modifier.alpha(if (entry.isHidden) 0.55f else 1f),
             contentAlignment = Alignment.Center,
         ) {
             EntryGlyph(entry)
-            // Over the glyph rather than beside it: a tick in its own column would move
-            // every row sideways the moment selection started, which reads as the list
-            // being rebuilt under the finger.
-            if (selecting) {
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .background(
-                            if (selected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.86f),
-                            CircleShape,
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (selected) {
-                        Icon(
-                            Ico.Check,
-                            null,
-                            Modifier.size(19.dp),
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    }
-                }
-            }
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {

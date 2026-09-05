@@ -85,6 +85,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var lineNumbers by mutableStateOf(prefs.lineNumbers)
         private set
+    var keyBar by mutableStateOf(prefs.keyBar)
+        private set
     var fontSizeSp by mutableStateOf(prefs.fontSizeSp)
         private set
     var previewZoomPct by mutableStateOf(prefs.previewZoomPct)
@@ -216,6 +218,25 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
      * basis discards it without asking.
      */
     fun unsavedTabs(): List<File> = tabs.filter { hasUnsavedWork(it) }
+
+    /**
+     * Throws away every unwritten buffer, and the tabs that were holding them.
+     *
+     * What Discard means. Leaving the tabs behind left the strip listing files whose edits
+     * had just been destroyed, so re-opening one showed the version on disk under a tab
+     * still marked as carrying work - and the next prompt asked about files that had
+     * nothing left to lose.
+     */
+    fun discardUnsaved() {
+        val doomed = unsavedTabs()
+        if (doomed.isEmpty()) return
+        doomed.forEach { buffers.forget(it.absolutePath) }
+        val gone = doomed.map { it.absolutePath }.toSet()
+        tabs = tabs.filterNot { it.absolutePath in gone }
+        visits.removeAll(gone)
+        if (file?.absolutePath in gone) file = null
+        refreshFlags()
+    }
 
     /**
      * Closes a tab and says what should be shown instead.
@@ -352,6 +373,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleWrap() { wordWrap = !wordWrap; prefs.wordWrap = wordWrap }
     fun toggleAutoPair() { autoPair = !autoPair; prefs.autoPair = autoPair }
     fun toggleLineNumbers() { lineNumbers = !lineNumbers; prefs.lineNumbers = lineNumbers }
+    fun toggleKeyBar() { keyBar = !keyBar; prefs.keyBar = keyBar }
     fun setFontSize(sp: Int) {
         fontSizeSp = sp.coerceIn(9, 26)
         prefs.fontSizeSp = fontSizeSp

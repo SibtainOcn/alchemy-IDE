@@ -1,8 +1,11 @@
 package com.sibtainocn.alchemy.ui.explorer
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -180,12 +183,16 @@ fun SearchResults(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ResultRow(entry: Entry, onClick: () -> Unit, onLongClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
             .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

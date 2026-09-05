@@ -53,6 +53,17 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("line_numbers", true)
         set(v) = sp.edit { putBoolean("line_numbers", v) }
 
+    /**
+     * Whether the row of language keys sits above the keyboard.
+     *
+     * On by default, because typing a colon or a bracket on a phone keyboard costs a
+     * layout switch. Off for anybody whose keyboard already carries those keys, who is
+     * otherwise paying two rows of screen for one row of use.
+     */
+    var keyBar: Boolean
+        get() = sp.getBoolean("key_bar", true)
+        set(v) = sp.edit { putBoolean("key_bar", v) }
+
     /** Text size in the terminal sheet, kept apart from the editor's own. */
     var terminalFontSp: Int
         get() = sp.getInt("terminal_font_sp", 13)

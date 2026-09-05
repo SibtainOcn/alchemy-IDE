@@ -8,12 +8,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 ## [1.2.0] - 2026-09-05
 
 ### Added
-- **Files can be picked in bulk.** Multi-select in the folder menu, or a press and hold on
-  any row, turns the list into something to choose from: a tap ticks a row, the bar counts
-  what is ticked against what is there and adds up what it weighs, and one control takes
-  all or none. A press and hold while picking, or the corner button, opens what can be done
-  with the set: copy, cut, move to a folder, delete. Rename and Open are deliberately not
-  offered, being answers to a question about one file.
+- **Files can be picked in bulk.** Multi-select in the 3-dot folder menu turns the list
+  into something to choose from: a tap ticks a row, the bar counts what is ticked against
+  what is there and adds up what it weighs, and one control takes all or none. The
+  long-press dialog also carries a Select row that enters multi-select with that item
+  already picked. A long press while picking opens what can be done with the set: share,
+  copy, cut, move to a folder, delete. The corner button closes the selection. Rename and
+  Open are deliberately not offered, being answers to a question about one file.
 - **Search walks the whole tree, and says so while it is doing it.** It used to filter the
   folder on screen, which answers a question nobody has: if you can see the folder you can
   see the file. Search now walks everything under where you are standing, and under the
@@ -51,6 +52,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   rename, copy, move and delete now announces itself, both ends of a transfer, with folders
   walked to a bounded depth. It is advisory in both directions and cannot fail an operation
   that has already succeeded on disk.
+- **Key bar toggle in the editor menu.** A new on/off switch in the 3-dot menu lets the
+  user hide the shortcut keyboard buttons above the editor. Undo and redo remain visible
+  in the status bar below, so turning the keys off does not remove the way to take back
+  what was typed.
 
 ### Changed
 - **Copy, cut, move and delete are one batch rather than a loop of single operations.**
@@ -69,6 +74,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   does. The strip is a clipboard again and says what it is carrying; the job has a dialog.
 - **The clipboard carries a selection rather than an entry.** It reads "3 items" when it is
   holding three.
+- **Long-press opens the options dialog, not multi-select.** A press and hold anywhere in
+  the file list opens the actions dialog for that item. It used to start multi-select and
+  pick the held row, which is not what an IDE user reaching for Cut or Rename expected.
+  Multi-select is now entered from the 3-dot menu or from the Select row inside the dialog.
+- **Search results respond to long-press.** A press and hold on a search result now opens
+  the same actions dialog as the main file list. Cut, copy, rename, delete and every other
+  action work on a result without leaving the search.
+- **Multi-select actions moved from the bottom sheet to the dialog.** The selection's batch
+  actions (share, copy, cut, move, delete) are reached through a long-press dialog while
+  in selection mode, the same gesture that reaches single-item actions outside it. The
+  corner button closes the selection instead of opening a sheet.
+- **Undo and redo moved to the left.** The two buttons are now at the left edge of the
+  status bar, where a thumb holding the phone already is, rather than in the top-right
+  corner where they shared space with the navigation gesture. Tap area is slightly
+  increased for easier reach.
+- **Open-files tabs are larger.** Each tab in the strip is taller, the filename is more
+  legible, and the close button has a bigger tap target so it is no longer missed on the
+  first try.
+
+### Fixed
+- **File and folder icons stay visible in selection mode.** The circular checkbox overlay
+  that covered every glyph while rows were being picked is gone. Selected rows are shown
+  by the background wash alone, so the icon underneath is never hidden and the list reads
+  the same way it does outside selection.
+
+
 
 ## [1.1.6] - 2026-09-05
 
