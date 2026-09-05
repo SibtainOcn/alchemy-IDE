@@ -38,6 +38,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -51,7 +53,7 @@ import com.sibtainocn.alchemy.ui.common.Ico
 import com.sibtainocn.alchemy.ui.common.ShapeLoader
 import com.sibtainocn.alchemy.ui.common.rememberCopyToClipboard
 import com.sibtainocn.alchemy.ui.theme.Radii
-import com.sibtainocn.alchemy.ui.theme.CodeFont
+import com.sibtainocn.alchemy.ui.theme.TerminalFont
 import com.sibtainocn.alchemy.ui.theme.Hairline
 import com.sibtainocn.alchemy.ui.theme.InkRaised
 import com.sibtainocn.alchemy.ui.theme.LocalAccents
@@ -76,31 +78,37 @@ import com.sibtainocn.alchemy.ui.theme.TextMid
 fun TerminalSheet(vm: TerminalViewModel, onOpenFile: (File) -> Unit = {}) {
     if (!vm.open) return
 
-    // Straight to full height. A half sheet put the prompt below the fold, which is the
-    // one part of a terminal that has to be reachable the moment it opens.
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // Opens at half and drags to full. It went straight to full height because the
+    // prompt was a bar pinned under the transcript, which a half sheet pushed below the
+    // fold. The prompt is the last line of the transcript now, so it arrives with the
+    // output, and a half sheet leaves the file underneath it in view.
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val accents = LocalAccents.current
 
-    // Follow the output down. Anchored to the count rather than to the content so a long
-    // burst scrolls once instead of per line.
-    LaunchedEffect(vm.lines.size) {
-        if (vm.lines.isNotEmpty()) listState.animateScrollToItem(vm.lines.lastIndex)
+    // Follow the output down, landing on the prompt rather than on the last line of
+    // output: the prompt is the final item, and stopping one short of it hides the thing
+    // the user is about to type into. Anchored to the count rather than to the content so
+    // a long burst scrolls once instead of once per line.
+    LaunchedEffect(vm.lines.size, vm.running) {
+        val last = listState.layoutInfo.totalItemsCount - 1
+        if (last >= 0) runCatching { listState.animateScrollToItem(last) }
     }
 
     ModalBottomSheet(
         onDismissRequest = { vm.close() },
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.background,
-        dragHandle = null,
+        // A handle, because the sheet is resizable now and nothing else says so.
+        dragHandle = { SheetGrip() },
         // The sheet keeps its own hands off the insets so the content can put the prompt
         // exactly on top of the keyboard rather than behind it.
         contentWindowInsets = { WindowInsets(0) },
     ) {
         Column(
             Modifier
-                .fillMaxHeight(0.94f)
+                .fillMaxHeight(0.92f)
                 .imePadding()
         ) {
             Header(
@@ -110,32 +118,41 @@ fun TerminalSheet(vm: TerminalViewModel, onOpenFile: (File) -> Unit = {}) {
             )
             Box(Modifier.fillMaxWidth().height(0.7.dp).background(Hairline))
 
-            // Selectable, because the first thing anyone does with an error they do not
-            // understand is copy it somewhere that might.
-            SelectionContainer(Modifier.weight(1f)) {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        start = 14.dp, end = 14.dp, top = 10.dp, bottom = 10.dp,
-                    ),
-                ) {
-                    val visible = vm.lines.filter { vm.showTimings || it !is ConsoleLine.Timing }
-                    items(visible.size) { index -> ConsoleRow(visible[index], vm.fontSizeSp) }
+            val visible = vm.lines.filter { vm.showTimings || it !is ConsoleLine.Timing }
+
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    start = 14.dp, end = 14.dp, top = 10.dp, bottom = 14.dp,
+                ),
+            ) {
+                // Selection is per row rather than around the whole list, because a
+                // selection container cannot hold a text field and the prompt is one of
+                // these rows now. The first thing anyone does with an error they do not
+                // understand is copy it somewhere that might, so the output rows keep it.
+                items(visible.size, key = { "line-" + it }) { index ->
+                    SelectionContainer { ConsoleRow(visible[index], vm.fontSizeSp) }
+                }
+
+                // The live line, in the transcript rather than in a bar beneath it. A
+                // terminal's input is its last line; a field docked over the keyboard read
+                // as a search box that happened to run things.
+                item(key = "prompt") {
+                    Prompt(
+                        value = input,
+                        running = vm.running,
+                        sizeSp = vm.fontSizeSp,
+                        onValue = { input = it },
+                        onSubmit = {
+                            vm.submit(input)
+                            input = ""
+                        },
+                        onStop = { vm.cancel() },
+                    )
                 }
             }
 
-            Box(Modifier.fillMaxWidth().height(0.7.dp).background(Hairline))
-            Prompt(
-                value = input,
-                running = vm.running,
-                onValue = { input = it },
-                onSubmit = {
-                    vm.submit(input)
-                    input = ""
-                },
-                onStop = { vm.cancel() },
-            )
             Spacer(Modifier.navigationBarsPadding())
         }
     }
@@ -200,7 +217,7 @@ private fun Header(
                     SmallAction(Ico.Minus, "Smaller") { vm.setFontSize(vm.fontSizeSp - 1) }
                     Text(
                         "${vm.fontSizeSp}",
-                        fontFamily = CodeFont,
+                        fontFamily = TerminalFont,
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.width(28.dp),
@@ -292,7 +309,9 @@ private fun SmallAction(
 private fun ConsoleRow(line: ConsoleLine, sizeSp: Int) {
     val accents = LocalAccents.current
     val body = sizeSp.sp
-    val bodyLine = (sizeSp * 1.45f).sp
+    // Terminal output is read line by line rather than in blocks, so it wants more air
+    // between rows than code does.
+    val bodyLine = (sizeSp * 1.55f).sp
     // Notes and timings are the app talking rather than the program, so they stay a step
     // smaller than the output whatever size the output is set to.
     val aside = (sizeSp - 1).coerceAtLeast(8).sp
@@ -301,13 +320,13 @@ private fun ConsoleRow(line: ConsoleLine, sizeSp: Int) {
         is ConsoleLine.Typed -> Row(Modifier.padding(top = 6.dp)) {
             Text(
                 PROMPT,
-                fontFamily = CodeFont,
+                fontFamily = TerminalFont,
                 fontSize = body,
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
                 line.command,
-                fontFamily = CodeFont,
+                fontFamily = TerminalFont,
                 fontSize = body,
                 lineHeight = bodyLine,
                 color = TextHigh,
@@ -319,7 +338,7 @@ private fun ConsoleRow(line: ConsoleLine, sizeSp: Int) {
         // run read as less important than the echo of what was typed.
         is ConsoleLine.Output -> Text(
             line.text,
-            fontFamily = CodeFont,
+            fontFamily = TerminalFont,
             fontSize = body,
             lineHeight = bodyLine,
             color = TextHigh,
@@ -327,7 +346,7 @@ private fun ConsoleRow(line: ConsoleLine, sizeSp: Int) {
 
         is ConsoleLine.Error -> Text(
             line.text,
-            fontFamily = CodeFont,
+            fontFamily = TerminalFont,
             fontSize = body,
             lineHeight = bodyLine,
             color = MaterialTheme.colorScheme.error,
@@ -335,7 +354,7 @@ private fun ConsoleRow(line: ConsoleLine, sizeSp: Int) {
 
         is ConsoleLine.Note -> Text(
             line.text,
-            fontFamily = CodeFont,
+            fontFamily = TerminalFont,
             fontSize = aside,
             lineHeight = bodyLine,
             color = accents.comment,
@@ -344,7 +363,7 @@ private fun ConsoleRow(line: ConsoleLine, sizeSp: Int) {
 
         is ConsoleLine.Timing -> Text(
             line.text,
-            fontFamily = CodeFont,
+            fontFamily = TerminalFont,
             fontSize = aside,
             lineHeight = bodyLine,
             color = accents.comment,
@@ -353,26 +372,36 @@ private fun ConsoleRow(line: ConsoleLine, sizeSp: Int) {
     }
 }
 
-/** The live line: a prompt, a caret, and whatever is being typed. */
+/**
+ * The live line: a prompt, a caret, and whatever is being typed.
+ *
+ * One more row of the console, at the console's own size, with no background of its own.
+ * It sits where the next line of output will go, which is where a terminal's input belongs
+ * and where the eye is already looking.
+ */
 @Composable
 private fun Prompt(
     value: String,
     running: Boolean,
+    sizeSp: Int,
     onValue: (String) -> Unit,
     onSubmit: () -> Unit,
     onStop: () -> Unit,
 ) {
+    val body = sizeSp.sp
+    val focus = remember { FocusRequester() }
+
+    // Typing is the point of the sheet, so the caret starts here.
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+
     Row(
-        Modifier
-            .fillMaxWidth()
-            .background(InkRaised)
-            .padding(horizontal = 14.dp, vertical = 11.dp),
+        Modifier.fillMaxWidth().padding(top = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             PROMPT,
-            fontFamily = CodeFont,
-            fontSize = 13.sp,
+            fontFamily = TerminalFont,
+            fontSize = body,
             color = MaterialTheme.colorScheme.primary,
         )
 
@@ -382,8 +411,8 @@ private fun Prompt(
             enabled = !running,
             singleLine = true,
             textStyle = TextStyle(
-                fontFamily = CodeFont,
-                fontSize = 13.sp,
+                fontFamily = TerminalFont,
+                fontSize = body,
                 color = if (running) TextLow else TextHigh,
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -395,14 +424,14 @@ private fun Prompt(
                 imeAction = ImeAction.Go,
             ),
             keyboardActions = KeyboardActions(onGo = { onSubmit() }),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).focusRequester(focus),
             decorationBox = { field ->
                 if (value.isEmpty()) {
                     Text(
                         if (running) "running..." else "run a command",
-                        fontFamily = CodeFont,
-                        fontSize = 13.sp,
-                        color = TextLow.copy(alpha = 0.6f),
+                        fontFamily = TerminalFont,
+                        fontSize = body,
+                        color = TextLow.copy(alpha = 0.55f),
                     )
                 }
                 field()
@@ -423,4 +452,18 @@ private fun Prompt(
  *
  * The path is said once when it changes, in the scrollback, and the prompt stays short.
  */
+/** A short bar saying the sheet can be dragged, drawn on the sheet's own background. */
+@Composable
+private fun SheetGrip() {
+    Box(Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .width(34.dp)
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Hairline)
+        )
+    }
+}
+
 private const val PROMPT = "~ $ "

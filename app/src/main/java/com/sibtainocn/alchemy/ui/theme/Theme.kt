@@ -74,6 +74,26 @@ val CodeFont = FontFamily(
     Font(R.font.jetbrains_mono_bold, FontWeight.Bold),
 )
 
+/**
+ * The face the terminal draws in.
+ *
+ * Hack rather than the editor's face, because the two are read differently. Editor text is
+ * scanned in structured blocks with syntax colour carrying much of the meaning; terminal
+ * text is a wall of one colour where every character has to stand alone, often at a
+ * smaller size, and often a character nobody chose to type.
+ *
+ * Hack descends from Bitstream Vera by way of DejaVu, which is what the desktop terminals
+ * this is imitating have used for twenty years. Wide, even, and unambiguous at small
+ * sizes: dotted zero, slashed-through nothing, a distinct 1, l and I.
+ *
+ * SIL Open Font License 1.1, plus the Bitstream Vera licence it inherits. Both compatible
+ * with the GPL.
+ */
+val TerminalFont = FontFamily(
+    Font(R.font.hack_regular, FontWeight.Normal),
+    Font(R.font.hack_bold, FontWeight.Bold),
+)
+
 private val AlchemyType = Typography(
     displaySmall = TextStyle(fontWeight = FontWeight.W300, fontSize = 34.sp, lineHeight = 40.sp, letterSpacing = (-0.6).sp),
     headlineSmall = TextStyle(fontWeight = FontWeight.W400, fontSize = 23.sp, lineHeight = 28.sp, letterSpacing = (-0.4).sp),

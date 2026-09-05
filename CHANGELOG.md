@@ -130,8 +130,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   answer to what was found: while something is outstanding it offers Check again, and when
   every row passes it offers one button that says Done. It previously offered Check again,
   Open Termux and Not now to somebody who had just been told they were ready.
-- **Code is set in JetBrains Mono.** The editor, the gutter, the terminal, the previewer
-  and the setup commands all used the platform's monospace, which varies by vendor and
+- **The terminal opens at half height and can be dragged to full.** It went straight to
+  full because the prompt was a bar pinned under the transcript, which a half sheet pushed
+  below the fold. The prompt is not a bar any more, so the sheet can behave like a sheet
+  and leave the file underneath it in view.
+- **Commands are typed in the terminal, on its last line.** The input was a field docked
+  over the keyboard, separate from the output it produced, which read as a search box that
+  happened to run things. It is now one more row of the console, in the console's own face
+  and size, sitting where the next line of output will appear. The view follows down to it
+  rather than stopping one line short.
+- **The terminal draws in Hack, not the editor's face.** The two are read differently:
+  editor text is scanned in blocks with syntax colour carrying much of the meaning, while
+  terminal text is a wall of one colour where every character stands alone, often smaller
+  and often not one anybody chose to type. Hack descends from Bitstream Vera by way of
+  DejaVu, which is what desktop terminals have used for twenty years. Rows are given more
+  air and the default size goes from 12 to 13.
+
+- **Code is set in JetBrains Mono.** The editor, the gutter, the previewer and the setup
+  commands all used the platform's monospace, which varies by vendor and
   draws 0 like O and 1 like l. Bundled rather than downloaded, under the SIL Open Font
   License, which is compatible with the GPL.
 - **The command history file always has something in it.** An empty file opened in the

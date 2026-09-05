@@ -55,7 +55,7 @@ class Prefs(context: Context) {
 
     /** Text size in the terminal sheet, kept apart from the editor's own. */
     var terminalFontSp: Int
-        get() = sp.getInt("terminal_font_sp", 12)
+        get() = sp.getInt("terminal_font_sp", 13)
         set(v) = sp.edit { putInt("terminal_font_sp", v) }
 
     /** Whether each command reports how long it took. */
