@@ -5,7 +5,7 @@ the name Hazel IDE.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.3] - 2026-09-05
+## [1.1.5] - 2026-09-05
 
 ### Fixed
 - **The terminal setup screen no longer says it is ready when it is not.** Readiness was
@@ -19,28 +19,70 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   drawn a step down from the command that produced it, which made the result of every
   successful run read as an aside.
 
-- **A long file no longer freezes the app when it is opened or scrolled.** The line-number
-  gutter drew every line in the file on every frame, not the forty on screen, and measured
-  the numbers it had no room to cache while it was drawing them. On a two thousand line
-  file that was a single frame costing six seconds, with the app entirely unresponsive
-  inside it; the device's own frame log recorded 6114ms, 4723ms and 3178ms while opening
-  a few Python files in turn. The gutter now draws the rows the viewport can show, and
-  finds their numbers by halving an index of the line starts rather than by counting from
-  the top of the file. The same files now cost 505ms at worst, and the system's severe
-  jank detector no longer fires at all.
-- **The file tree no longer shakes when it is dragged to the top.** The sheet's contents
-  were laid out at 92% of the screen, which put its expanded position a sliver below the
-  top edge rather than on it. A drag that ended near there left the sheet and the tree
-  inside it each trying to consume the same last few pixels, one undoing the other every
-  frame. The contents are full height now, so the drag lands exactly on the sheet's own
-  anchor. It still opens half way, which is measured from the sheet's height either way.
-- **Re-entering the editor no longer draws the file you had last time first.** The screen
-  followed the open file through an effect, which runs after the frame that opened it, so
-  a file picked after backing out to the browser arrived one frame late and the previous
-  one was composed and thrown away in the meantime. On a long file that discarded frame is
-  a whole document laid out for nothing, and it was most of the cost of opening anything
-  after walking through a few folders.
+### Changed
+- **The setup screen is a checklist rather than a wall.** Numbered rows with a live status
+  each, a progress track in the header, commands set in the code face at a size they can be
+  read at against near black, and a copy button that says Copied when it has. The buttons
+  answer to what was found: while something is outstanding it offers Check again, and when
+  every row passes it offers one button that says Done. It previously offered Check again,
+  Open Termux and Not now to somebody who had just been told they were ready.
+- **The terminal opens at half height and can be dragged to full.** It went straight to
+  full because the prompt was a bar pinned under the transcript, which a half sheet pushed
+  below the fold. The prompt is not a bar any more, so the sheet can behave like a sheet
+  and leave the file underneath it in view.
+- **Commands are typed in the terminal, on its last line.** The input was a field docked
+  over the keyboard, separate from the output it produced, which read as a search box that
+  happened to run things. It is now one more row of the console, in the console's own face
+  and size, sitting where the next line of output will appear. The view follows down to it
+  rather than stopping one line short.
+- **The terminal draws in Hack, not the editor's face.** The two are read differently:
+  editor text is scanned in blocks with syntax colour carrying much of the meaning, while
+  terminal text is a wall of one colour where every character stands alone, often smaller
+  and often not one anybody chose to type. Hack descends from Bitstream Vera by way of
+  DejaVu, which is what desktop terminals have used for twenty years. Rows are given more
+  air and the default size goes from 12 to 13.
+- **Code is set in JetBrains Mono.** The editor, the gutter, the previewer and the setup
+  commands all used the platform's monospace, which varies by vendor and
+  draws 0 like O and 1 like l. Bundled rather than downloaded, under the SIL Open Font
+  License, which is compatible with the GPL.
+- **The command history file always has something in it.** An empty file opened in the
+  editor is indistinguishable from a button that did nothing, so it carries a note when
+  there is no history yet. Lines opening with `#` are not offered back as commands, so the
+  note, and anything written next to it, stays out of the recall list.
+- **Release builds number themselves one at a time.** `versionCode` was the repository's
+  commit count, so it moved by however many commits a release happened to contain. It is
+  now one per release. It continues from where the old scheme left off rather than
+  restarting, because a version code may never go backwards: v1.1.3 shipped as 54, so
+  1.1.4 is 55 and this release is 56.
 
+### Added
+- **Files Alchemy does not edit open in the app that does.** Tapping a picture, a video,
+  an archive, a PDF, an installer, an Office or OpenDocument file, or a page hands it to
+  whatever the device already opens it with, instead of loading it and reporting that it
+  is not text. Code and plain text still open in the editor.
+
+  HTML is the deliberate case: it is source and it is also a page, so a tap renders it in
+  a browser and **Open in editor**, on the entry's own press-and-hold menu, edits it. That
+  menu also carries **Open with another app** for everything else, so the routing a tap
+  chooses is never the only way in. When a text-shaped name turns out to hold binary
+  anyway, the editor offers the same hand-off rather than stopping at a message.
+
+  The file is passed as a `content://` URI through a `FileProvider`, read-only and for as
+  long as the receiving app is on screen, because since API 24 a `file://` URI crossing to
+  another process throws.
+
+- **The mark on the launch screen is the app icon.** The starting window drew its own
+  copy of the old letter A, which no longer matched anything.
+- **The file access screen shows what is being asked for.** It led with the app's own
+  mark, which tells the reader who is asking at a moment when they already know. It now
+  leads with the permission's icon in a tonal container, which is the pattern the system's
+  own permission screens use. The last of the old letter A artwork goes with it: the
+  launcher, the launch screen and this screen were three separate drawings of the mark,
+  and there is now one.
+
+## [1.1.4] - 2026-09-05
+
+### Fixed
 - **Rearranging the keys above the keyboard works more than once.** The row kept its
   working order in a `remember` keyed on the saved order, so writing an order back handed
   out a new state object - while the drag went on writing to the one it had closed over,
@@ -64,11 +106,118 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   width per character cell regardless of content, which is not what a table is, and
   several places that had no reason to be tinted were drawing their text in the accent
   colour. Columns are measured from their contents and ordinary text is ordinary again.
-
 - **Leaving the editor asks about every unsaved file, not just the one on screen.** The
   prompt was gated on the visible buffer, so a file edited and then switched away from was
   discarded silently on the way out. Closing a single tab already asked; this is the same
   question for the whole strip.
+
+### Changed
+- **The editing surface draws the lines on screen rather than the whole document.** The
+  editor is built on sora-editor now, with this app's own scanner, palette, key bar and
+  file handling on top of it. This is what the gutter fix in 1.1.3 was a down payment on:
+  selection, the IME, undo across many lines and horizontal scrolling all cost the
+  viewport instead of the file, so a three megabyte file costs about what a small one
+  does - the worst frame while scrolling one is 42ms, against six seconds before any of
+  this. Pinch-to-zoom, a horizontal scrollbar and smoother scrolling come with it.
+  sora-editor is LGPL-2.1, whose third section permits taking it under the GPL.
+- **Undo covers what you actually did.** The buffer is the editor's own, so undo spans as
+  many lines as an edit touched instead of stopping at one, and a block indent or a
+  comment toggle comes back in one step. Undoing back to the text that is on disk also
+  clears the unsaved marker, which it did not before: the file and the buffer agree again,
+  so saying otherwise was simply wrong.
+- **Colours are named once, in one place.** The highlighter reports what a token *is*
+  rather than what colour it should be, and a single palette turns those into colours for
+  both the editor and the Markdown preview. Nothing user-visible changes today; it is what
+  makes a light theme, or any other, a palette rather than a rewrite.
+- **A file can be edited up to four megabytes rather than two.** Editing is no longer
+  bounded by what a Compose text field could lay out, so the limit is about memory now:
+  four megabytes to edit, sixteen to open read-only.
+- **Word wrap starts off.** Code has meaningful line ends and a wrapped line hides them.
+  It is still one switch away, and the switch is remembered.
+- **The three-dot menu uses switches instead of the words on and off.** A row that reads
+  "Line numbers  On" tells you the state and not what tapping it does; a switch is both.
+- **The splash is the name alone, centred.** The mark above it was a letter A standing in
+  for a logo that does not exist yet. The shimmer across the name is unchanged.
+- **The splash is on screen for 1.1 seconds rather than 1.5.** One pass of the shine is
+  the whole of it, and the pass was longer than it needed to be.
+- **`Home` goes to the start of the line.** It used to toggle between the first non-space
+  character and column zero. The editor's own line-start movement does not, and the
+  toggle was not worth reimplementing on top of it.
+
+### Added
+- **Auto-pairing, and block edits that know what a line is.** Typing an opening bracket or
+  quote closes it and puts the caret between the halves; Enter after a line that opens a
+  block indents the new line to match. The key bar indents, dedents and toggles comments
+  across a whole selection, duplicates a line and deletes one, each as a single undo step
+  rather than as the several edits it is made of.
+- **Alchemy is offered for code files sent from other apps, and opens them directly.**
+  It previously claimed only `text/*`, which is not what a file manager sends: Android's
+  own type table reports most source extensions as `application/octet-stream`, so a `.kt`
+  or a `.rs` never reached the list. It now claims the text formats registered outside
+  `text/` as well, and claims `octet-stream` bounded by 57 source extensions rather than
+  outright, so it is not offered as a handler for every unknown binary on the device.
+  Files arriving as `content://` are resolved through the external storage, downloads and
+  media providers rather than only the first of those. The activity is `singleTask`, so
+  opening a second file while Alchemy is running reuses the running editor instead of
+  building another one, rather than paying for a second activity, theme inflation and
+  first composition.
+- **Reading a large file reports how far it has got.** Above 256 KB the file is decoded in
+  64 KB chunks and the loader shows the name, the size and a percentage taken from bytes
+  actually consumed off the stream. The chunked path is also interruptible, so backing out
+  of a large file stops the read rather than letting it run to completion in the
+  background, and opening another file cancels the one before it instead of racing it.
+- **The app comes back from a crash knowing what it was.** An uncaught exception on
+  Android ends the process behind a system dialog that names nothing, which leaves the one
+  person who knows what they were doing with no way to say it. The last thing to run now
+  writes the failure down - version, device, thread, trace - and the next launch shows it
+  once, with a button that copies it. It deliberately does not try to continue through the
+  failure: after an error nothing anticipated, the text held in memory may be damaged, and
+  writing that back over a real file is worse than closing. The report is taken off the
+  device as soon as it has been read rather than when the dialog is dismissed, so it
+  cannot survive being swiped away and greet a later launch as though the app had just
+  crashed again.
+- **A launcher icon built from the brand mark.** Adaptive, so the launcher masks it into
+  whatever shape the device uses rather than showing a rectangle inside that shape: the
+  foreground is the mark on transparency, sized inside the 66dp safe zone, over a near
+  black background layer. Ships a themed variant for Android 13, which the launcher tints
+  itself, and plain square and round bitmaps for API 24 and 25, which have no adaptive
+  icons at all.
+- **The GPL-3 text is in the repository.** The README's badge and its licence section both
+  pointed at a `LICENSE` that was not there. Taken verbatim from gnu.org.
+
+### Documentation
+- `docs/SORA-MIGRATION.md` records the whole migration: why the previous approach could
+  not be made fast, what was built, what was measured, the two draw-thread crashes and
+  why `SafeSpans` is a net rather than a cure, and the gaps left open.
+- `docs/MANUAL-TEST-PLAN.md` lists every check to run by hand, per phase, with expected
+  against actual results.
+- The README has the banner and the assets it points at, and `NOTICE` records sora-editor
+  and the LGPL-2.1 section 3 basis for conveying it under the GPL.
+
+## [1.1.3] - 2026-09-05
+
+### Fixed
+- **A long file no longer freezes the app when it is opened or scrolled.** The line-number
+  gutter drew every line in the file on every frame, not the forty on screen, and measured
+  the numbers it had no room to cache while it was drawing them. On a two thousand line
+  file that was a single frame costing six seconds, with the app entirely unresponsive
+  inside it; the device's own frame log recorded 6114ms, 4723ms and 3178ms while opening
+  a few Python files in turn. The gutter now draws the rows the viewport can show, and
+  finds their numbers by halving an index of the line starts rather than by counting from
+  the top of the file. The same files now cost 505ms at worst, and the system's severe
+  jank detector no longer fires at all.
+- **The file tree no longer shakes when it is dragged to the top.** The sheet's contents
+  were laid out at 92% of the screen, which put its expanded position a sliver below the
+  top edge rather than on it. A drag that ended near there left the sheet and the tree
+  inside it each trying to consume the same last few pixels, one undoing the other every
+  frame. The contents are full height now, so the drag lands exactly on the sheet's own
+  anchor. It still opens half way, which is measured from the sheet's height either way.
+- **Re-entering the editor no longer draws the file you had last time first.** The screen
+  followed the open file through an effect, which runs after the frame that opened it, so
+  a file picked after backing out to the browser arrived one frame late and the previous
+  one was composed and thrown away in the meantime. On a long file that discarded frame is
+  a whole document laid out for nothing, and it was most of the cost of opening anything
+  after walking through a few folders.
 
 ### Changed
 - **Colouring a long file happens off the main thread.** Past about twenty thousand
@@ -88,155 +237,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   screen. A tab holding work that is not on disk is never dropped to honour either limit,
   because that work is not the app's to throw away. Reaching the ceiling now needs several
   large files edited and left unsaved at once, rather than twelve files merely opened.
-
-- **The editing surface draws the lines on screen rather than the whole document.** The
-  editor is built on sora-editor now, with this app's own scanner, palette, key bar and
-  file handling on top of it. This is what the gutter fix above was a down payment on:
-  selection, the IME, undo across many lines and horizontal scrolling all cost the
-  viewport instead of the file, so a three megabyte file costs about what a small one
-  does - the worst frame while scrolling one is 42ms, against six seconds before any of
-  this. Pinch-to-zoom, a horizontal scrollbar and smoother scrolling come with it.
-  sora-editor is LGPL-2.1, whose third section permits taking it under the GPL.
-- **Word wrap starts off.** Code has meaningful line ends and a wrapped line hides them.
-  It is still one switch away, and the switch is remembered.
-- **The three-dot menu uses switches instead of the words on and off.** A row that reads
-  "Line numbers  On" tells you the state and not what tapping it does; a switch is both.
-- **The splash is the name alone, centred.** The mark above it was a letter A standing in
-  for a logo that does not exist yet. The shimmer across the name is unchanged.
-- **The splash is on screen for 1.1 seconds rather than 1.5.** One pass of the shine is
-  the whole of it, and the pass was longer than it needed to be.
-
-- **Undo covers what you actually did.** The buffer is the editor's own, so undo spans as
-  many lines as an edit touched instead of stopping at one, and a block indent or a
-  comment toggle comes back in one step. Undoing back to the text that is on disk also
-  clears the unsaved marker, which it did not before: the file and the buffer agree again,
-  so saying otherwise was simply wrong.
-- **Colours are named once, in one place.** The highlighter reports what a token *is*
-  rather than what colour it should be, and a single palette turns those into colours for
-  both the editor and the Markdown preview. Nothing user-visible changes today; it is what
-  makes a light theme, or any other, a palette rather than a rewrite.
-- **Release builds number themselves one at a time.** `versionCode` was the repository's
-  commit count, so it moved by however many commits a release happened to contain. It is
-  now one per release. It continues from where the old scheme left off rather than
-  restarting, because a version code may never go backwards: v1.1.3 shipped as 54, so the
-  next release is 55.
-- **`Home` goes to the start of the line.** It used to toggle between the first non-space
-  character and column zero. The editor's own line-start movement does not, and the
-  toggle was not worth reimplementing on top of it.
-
-- **The setup screen is a checklist rather than a wall.** Numbered rows with a live status
-  each, a progress track in the header, commands set in the code face at a size they can be
-  read at against near black, and a copy button that says Copied when it has. The buttons
-  answer to what was found: while something is outstanding it offers Check again, and when
-  every row passes it offers one button that says Done. It previously offered Check again,
-  Open Termux and Not now to somebody who had just been told they were ready.
-- **The terminal opens at half height and can be dragged to full.** It went straight to
-  full because the prompt was a bar pinned under the transcript, which a half sheet pushed
-  below the fold. The prompt is not a bar any more, so the sheet can behave like a sheet
-  and leave the file underneath it in view.
-- **Commands are typed in the terminal, on its last line.** The input was a field docked
-  over the keyboard, separate from the output it produced, which read as a search box that
-  happened to run things. It is now one more row of the console, in the console's own face
-  and size, sitting where the next line of output will appear. The view follows down to it
-  rather than stopping one line short.
-- **The terminal draws in Hack, not the editor's face.** The two are read differently:
-  editor text is scanned in blocks with syntax colour carrying much of the meaning, while
-  terminal text is a wall of one colour where every character stands alone, often smaller
-  and often not one anybody chose to type. Hack descends from Bitstream Vera by way of
-  DejaVu, which is what desktop terminals have used for twenty years. Rows are given more
-  air and the default size goes from 12 to 13.
-
-- **Code is set in JetBrains Mono.** The editor, the gutter, the previewer and the setup
-  commands all used the platform's monospace, which varies by vendor and
-  draws 0 like O and 1 like l. Bundled rather than downloaded, under the SIL Open Font
-  License, which is compatible with the GPL.
-- **The command history file always has something in it.** An empty file opened in the
-  editor is indistinguishable from a button that did nothing, so it carries a note when
-  there is no history yet. Lines opening with `#` are not offered back as commands, so the
-  note, and anything written next to it, stays out of the recall list.
-
-- **A file can be edited up to four megabytes rather than two.** Editing is no longer
-  bounded by what a Compose text field could lay out, so the limit is about memory now:
-  four megabytes to edit, sixteen to open read-only.
-
-### Added
-- **Files Alchemy does not edit open in the app that does.** Tapping a picture, a video,
-  an archive, a PDF, an installer, an Office or OpenDocument file, or a page hands it to
-  whatever the device already opens it with, instead of loading it and reporting that it
-  is not text. Code and plain text still open in the editor.
-
-  HTML is the deliberate case: it is source and it is also a page, so a tap renders it in
-  a browser and **Open in editor**, on the entry's own press-and-hold menu, edits it. That
-  menu also carries **Open with another app** for everything else, so the routing a tap
-  chooses is never the only way in. When a text-shaped name turns out to hold binary
-  anyway, the editor offers the same hand-off rather than stopping at a message.
-
-  The file is passed as a `content://` URI through a `FileProvider`, read-only and for as
-  long as the receiving app is on screen, because since API 24 a `file://` URI crossing to
-  another process throws.
-
-- **Auto-pairing, and block edits that know what a line is.** Typing an opening bracket or
-  quote closes it and puts the caret between the halves; Enter after a line that opens a
-  block indents the new line to match. The key bar indents, dedents and toggles comments
-  across a whole selection, duplicates a line and deletes one, each as a single undo step
-  rather than as the several edits it is made of.
-- **The mark on the launch screen is the app icon.** The starting window drew its own
-  copy of the old letter A, which no longer matched anything.
-
-- **The file access screen shows what is being asked for.** It led with the app's own
-  mark, which tells the reader who is asking at a moment when they already know. It now
-  leads with the permission's icon in a tonal container, which is the pattern the system's
-  own permission screens use. The last of the old letter A artwork goes with it: the
-  launcher, the launch screen and this screen were three separate drawings of the mark,
-  and there is now one.
-
-- **A launcher icon built from the brand mark.** Adaptive, so the launcher masks it into
-  whatever shape the device uses rather than showing a rectangle inside that shape: the
-  foreground is the mark on transparency, sized inside the 66dp safe zone, over a near
-  black background layer. Ships a themed variant for Android 13, which the launcher tints
-  itself, and plain square and round bitmaps for API 24 and 25, which have no adaptive
-  icons at all. The starting window the system draws before the first frame uses that same
-  foreground layer rather than a second copy of the mark, so the icon on the home screen
-  and the icon on the launch screen cannot drift apart.
-- **The GPL-3 text is in the repository.** The README's badge and its licence section both
-  pointed at a `LICENSE` that was not there. Taken verbatim from gnu.org.
-
-- **Alchemy is offered for code files sent from other apps, and opens them directly.**
-  It previously claimed only `text/*`, which is not what a file manager sends: Android's
-  own type table reports most source extensions as `application/octet-stream`, so a `.kt`
-  or a `.rs` never reached the list. It now claims the text formats registered outside
-  `text/` as well, and claims `octet-stream` bounded by 57 source extensions rather than
-  outright, so it is not offered as a handler for every unknown binary on the device.
-  Files arriving as `content://` are resolved through the external storage, downloads and
-  media providers rather than only the first of those. The activity is `singleTask`, so
-  opening a second file while Alchemy is running reuses the running editor instead of
-  building another one, rather than paying for a second activity, theme inflation and
-  first composition.
-- **Reading a large file reports how far it has got.** Above 256 KB the file is decoded in
-  64 KB chunks and the loader shows the name, the size and a percentage taken from bytes
-  actually consumed off the stream. The chunked path is also interruptible, so backing out
-  of a large file stops the read rather than letting it run to completion in the
-  background, and opening another file cancels the one before it instead of racing it.
-
-- **The app comes back from a crash knowing what it was.** An uncaught exception on
-  Android ends the process behind a system dialog that names nothing, which leaves the one
-  person who knows what they were doing with no way to say it. The last thing to run now
-  writes the failure down - version, device, thread, trace - and the next launch shows it
-  once, with a button that copies it. It deliberately does not try to continue through the
-  failure: after an error nothing anticipated, the text held in memory may be damaged, and
-  writing that back over a real file is worse than closing. The report is taken off the
-  device as soon as it has been read rather than when the dialog is dismissed, so it
-  cannot survive being swiped away and greet a later launch as though the app had just
-  crashed again.
-
-### Documentation
-- `docs/SORA-MIGRATION.md` records the whole migration: why the previous approach could
-  not be made fast, what was built, what was measured, the two draw-thread crashes and
-  why `SafeSpans` is a net rather than a cure, and the gaps left open.
-- `docs/MANUAL-TEST-PLAN.md` lists every check to run by hand, per phase, with expected
-  against actual results.
-- The README has the banner and the assets it points at, and `NOTICE` records sora-editor
-  and the LGPL-2.1 section 3 basis for conveying it under the GPL.
 
 ## [1.1.2] - 2026-09-04
 

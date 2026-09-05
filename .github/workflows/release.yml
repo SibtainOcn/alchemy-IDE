@@ -65,7 +65,7 @@ jobs:
           # copies would never be offered the update.
           #
           # So the release count is carried forward from where the old scheme stopped:
-          # 54 with five tags in place, making the next release 55, then 56, 57.
+          # 54 with five tags in place, making 1.1.4 release 55, 1.1.5 release 56, then 57.
           #
           # A tag push already has its own tag, so it counts itself; a manual run happens
           # before the tag exists, so the release about to be made is added on. A released
