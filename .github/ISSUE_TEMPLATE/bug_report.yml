@@ -1,0 +1,83 @@
+name: 🐛 Bug Report
+description: Report something that isn't working as expected
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill in as much detail as you can.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this hasn't been reported already
+          required: true
+        - label: I'm using the latest release of Alchemy IDE
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Alchemy IDE Version
+      description: Found in Settings > About, or the release you downloaded
+      placeholder: "e.g. v1.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: android-version
+    attributes:
+      label: Android Version
+      placeholder: "e.g. Android 13"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device Model
+      placeholder: "e.g. Samsung Galaxy S21"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      placeholder: Tell us what went wrong
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open '...'
+        2. Tap on '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: If applicable, add logs, a screenshot, or screen recording
+      render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
