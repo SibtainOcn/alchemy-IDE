@@ -107,16 +107,22 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # The build's verdict comes from the tests and the compile, not from whether a
+      # convenience copy of the output could be stored. Artifact storage is billed per
+      # account, so a full quota anywhere reports a passing build as a failing one.
       - name: Upload debug APK
         if: success() && github.event_name == 'push'
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: alchemy-debug-apk
           path: app/build/outputs/apk/fdroid/debug/*.apk
           retention-days: 1
 
+      # Nor should the reports for a failure be able to add a second one on top of it.
       - name: Upload reports on failure
         if: failure()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: reports
