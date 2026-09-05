@@ -14,6 +14,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   all or none. A press and hold while picking, or the corner button, opens what can be done
   with the set: copy, cut, move to a folder, delete. Rename and Open are deliberately not
   offered, being answers to a question about one file.
+- **Search walks the whole tree, and says so while it is doing it.** It used to filter the
+  folder on screen, which answers a question nobody has: if you can see the folder you can
+  see the file. Search now walks everything under where you are standing, and under the
+  field is a row of one-tap searches - Folders, Code, .py, .md, .pdf, Documents, Images,
+  Audio, Video, Archives, APK - which are the half of file searches that are not about a
+  name at all. A chip and a name narrow each other.
+
+  Results appear as they are found rather than at the end, each with the folder it came out
+  of, because three files called `notes.md` are the same row three times until you can see
+  where each one lives. A line at the top edge of the window says the walk is still going;
+  it is indeterminate because a recursive walk genuinely does not know how much is left,
+  and a bar that guesses at that is a bar that lies. Every keystroke supersedes the walk in
+  flight rather than queueing behind it, the walk is breadth first so what is nearest
+  arrives first, a folder that cannot be read is stepped over rather than fatal, and the
+  whole thing stops at two thousand results and says that it did.
+
 - **A transfer says what it is doing while it does it.** A dialog in front of the folder
   with the name of the file being written, the percentage, the speed, and a bar across the
   whole selection rather than the current file. Cancel stops the work; Hide leaves it

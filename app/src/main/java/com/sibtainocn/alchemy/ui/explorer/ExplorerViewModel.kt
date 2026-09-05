@@ -8,6 +8,8 @@ import com.sibtainocn.alchemy.data.Entry
 import com.sibtainocn.alchemy.data.FileStore
 import com.sibtainocn.alchemy.data.MediaIndex
 import com.sibtainocn.alchemy.data.Prefs
+import com.sibtainocn.alchemy.data.Search
+import com.sibtainocn.alchemy.data.SearchKind
 import com.sibtainocn.alchemy.data.SortBy
 import com.sibtainocn.alchemy.data.Transfer
 import kotlinx.coroutines.CancellationException
@@ -114,6 +116,14 @@ data class ExplorerState(
     val selecting: Boolean = false,
     /** Absolute paths ticked in selection mode. */
     val selected: Set<String> = emptySet(),
+    /** The chip in force, or null when the search is on names alone. */
+    val searchKind: SearchKind? = null,
+    /** What the walk has found so far, deepest folders last. */
+    val results: List<Entry> = emptyList(),
+    /** True while the tree is still being walked. */
+    val searchRunning: Boolean = false,
+    /** True when the walk stopped at the cap rather than at the end of the tree. */
+    val searchTruncated: Boolean = false,
 ) {
     val visible: List<Entry>
         get() {
@@ -148,6 +158,9 @@ data class ExplorerState(
     val selectedBytes: Long get() = selection.sumOf { if (it.isDir) 0L else it.sizeBytes }
 
     val allSelected: Boolean get() = visible.isNotEmpty() && selected.size >= visible.size
+
+    /** True once the search has been given something to go on. */
+    val searchAsked: Boolean get() = query.isNotBlank() || searchKind != null
 }
 
 class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
@@ -168,6 +181,9 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The batch in flight, held so Cancel has something to cancel. */
     private var transfer: Job? = null
+
+    /** The walk in flight. A newer search cancels it where it stands. */
+    private var searchJob: Job? = null
 
     // The running average behind the speed readout. Plain fields rather than state: they
     // are written from the worker thread on every report and read only to produce the one
@@ -236,10 +252,76 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setQuery(q: String) = _state.update { it.copy(query = q) }
+    fun setQuery(q: String) {
+        _state.update { it.copy(query = q) }
+        search()
+    }
 
-    fun setSearching(on: Boolean) =
-        _state.update { it.copy(searching = on, query = if (on) it.query else "") }
+    /** Picks a kind to search for, or drops the one in force. Tapping the same chip clears it. */
+    fun setSearchKind(kind: SearchKind?) {
+        _state.update { it.copy(searchKind = if (it.searchKind == kind) null else kind) }
+        search()
+    }
+
+    fun setSearching(on: Boolean) {
+        searchJob?.cancel()
+        searchJob = null
+        _state.update {
+            it.copy(
+                searching = on,
+                query = "",
+                searchKind = null,
+                results = emptyList(),
+                searchRunning = false,
+                searchTruncated = false,
+                // Picking and searching are two modes and only one can be on: the bar has
+                // room for one question at a time.
+                selecting = false,
+                selected = emptySet(),
+            )
+        }
+    }
+
+    /**
+     * Walks the current folder and everything under it.
+     *
+     * Debounced, because a search is started by every keystroke and the one being typed
+     * over is worth nothing. Superseded rather than queued: the previous walk is cancelled
+     * where it stands, which the file layer checks for on every directory.
+     *
+     * Results are published as they are found rather than at the end. On a large volume
+     * the difference is a list that fills in front of you against a spinner that sits
+     * there for ten seconds and then produces everything at once.
+     */
+    private fun search() {
+        searchJob?.cancel()
+        val s = _state.value
+        if (!s.searching || !s.searchAsked) {
+            _state.update { it.copy(results = emptyList(), searchRunning = false, searchTruncated = false) }
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            _state.update { it.copy(searchRunning = true, results = emptyList(), searchTruncated = false) }
+            val outcome = runCatching {
+                Search.run(s.dir, s.query, s.searchKind, s.showHidden) { batch ->
+                    _state.update { it.copy(results = batch) }
+                }
+            }
+            // A cancelled walk has been replaced by a newer one, which owns the state now.
+            outcome
+                .onSuccess { result ->
+                    _state.update {
+                        it.copy(
+                            results = result.entries,
+                            searchRunning = false,
+                            searchTruncated = result.truncated,
+                        )
+                    }
+                }
+                .onFailure { if (it !is CancellationException) fail(it) }
+        }
+    }
 
     fun setSort(by: SortBy, descending: Boolean) {
         prefs.sortBy = by
@@ -528,5 +610,13 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         /** How long a speed sample runs before it is folded into the average. */
         const val SPEED_WINDOW_MS = 400L
+
+        /**
+         * How long a keystroke waits before it becomes a search.
+         *
+         * Long enough that typing a word starts one walk rather than five, short enough
+         * that the pause between finishing a word and looking up is not noticeable.
+         */
+        const val SEARCH_DEBOUNCE_MS = 220L
     }
 }

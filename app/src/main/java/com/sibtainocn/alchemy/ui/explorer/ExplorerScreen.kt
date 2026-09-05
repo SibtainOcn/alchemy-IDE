@@ -49,6 +49,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.DropdownMenu
@@ -73,6 +74,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -334,6 +336,10 @@ fun ExplorerScreen(
             } else {
                 ExplorerBar(
                     state = state,
+                    // The walk is reported at the top edge of the window, which is where
+                    // a browser puts it and where it can be seen without looking away
+                    // from the results filling in underneath.
+                    busy = state.searchRunning,
                     onUp = { vm.up() },
                     onSearchToggle = { vm.setSearching(it) },
                     onQuery = vm::setQuery,
@@ -346,7 +352,14 @@ fun ExplorerScreen(
                 )
             }
 
-            Crumbs(dir = state.dir, onJump = vm::jumpTo)
+            // While searching, the chips take the breadcrumbs' place: the path is not
+            // where the results are coming from any more, and the kinds are what the
+            // screen is now for.
+            if (state.searching) {
+                SearchChips(selected = state.searchKind, onPick = vm::setSearchKind)
+            } else {
+                Crumbs(dir = state.dir, onJump = vm::jumpTo)
+            }
 
             // What this session has open, in the place somebody browsing for the next file
             // is already looking. The editor draws the same strip under its own bar; out
@@ -380,6 +393,29 @@ fun ExplorerScreen(
             }
 
             HairlineDivider()
+
+            if (state.searching) {
+                SearchResults(
+                    root = state.dir,
+                    query = state.query,
+                    kind = state.searchKind,
+                    results = state.results,
+                    running = state.searchRunning,
+                    truncated = state.searchTruncated,
+                    onOpen = { entry ->
+                        // A folder result is a place to go, so going there ends the
+                        // search: the answer to "where is it" is standing in it.
+                        if (entry.isDir) {
+                            vm.setSearching(false)
+                            vm.open(entry.file)
+                        } else {
+                            openEntry(entry.file)
+                        }
+                    },
+                    onHold = { sheetFor = it },
+                )
+                return@Column
+            }
 
             // Directory changes slide: descending pushes in from the right, going up
             // pulls back from the left. It keeps the hierarchy legible without a map.
@@ -722,6 +758,8 @@ private fun SelectionBar(
 @Composable
 private fun ExplorerBar(
     state: ExplorerState,
+    /** True while a search is walking the tree. */
+    busy: Boolean,
     onUp: () -> Unit,
     onSearchToggle: (Boolean) -> Unit,
     onQuery: (String) -> Unit,
@@ -736,6 +774,21 @@ private fun ExplorerBar(
     var menuOpen by remember { mutableStateOf(false) }
 
     Column(Modifier.windowInsetsPadding(WindowInsets.statusBars)) {
+        // Indeterminate on purpose. A recursive walk has no idea how many directories are
+        // left, and a bar that guesses at that is a bar that lies. The height is held
+        // either way so the bar does not shift down when a search starts.
+        if (busy) {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().height(2.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = Hairline,
+                strokeCap = StrokeCap.Butt,
+                gapSize = 0.dp,
+            )
+        } else {
+            Spacer(Modifier.height(2.dp))
+        }
+
         Row(
             Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -755,7 +808,14 @@ private fun ExplorerBar(
                         value = state.query,
                         onValueChange = onQuery,
                         singleLine = true,
-                        placeholder = { Text("Filter in this folder", color = TextLow) },
+                        placeholder = {
+                            // It walks the whole tree now, so it no longer claims to be a
+                            // filter over what is on screen.
+                            Text(
+                                "Search in " + state.dir.name.ifBlank { "storage" },
+                                color = TextLow,
+                            )
+                        },
                         modifier = Modifier.fillMaxWidth().focusRequester(focus),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = {}),
@@ -786,7 +846,12 @@ private fun ExplorerBar(
             }
 
             if (state.searching) {
-                BarButton(Ico.Close, "Close search") { onSearchToggle(false) }
+                // Clears what was typed while there is something to clear, and leaves the
+                // search when there is not - which is the same X doing the one thing that
+                // is left to undo.
+                BarButton(Ico.Close, if (state.query.isEmpty()) "Close search" else "Clear") {
+                    if (state.query.isEmpty()) onSearchToggle(false) else onQuery("")
+                }
             } else {
                 BarButton(Ico.Search, "Search") { onSearchToggle(true) }
                 BarButton(Ico.Sort, "Sort", onClick = onSort)

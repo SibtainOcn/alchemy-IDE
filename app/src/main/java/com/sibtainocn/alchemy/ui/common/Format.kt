@@ -40,6 +40,9 @@ object Fmt {
         return if (bytes > 0) size(bytes) + "  ·  " + items else items
     }
 
+    /** How many things a search turned up. */
+    fun matches(count: Int): String = if (count == 1) "1 match" else "$count matches"
+
     fun subtitle(entry: Entry): String = when {
         !entry.isDir -> size(entry.sizeBytes)
         entry.childCount < 0 -> "Locked"
