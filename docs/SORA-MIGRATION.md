@@ -322,14 +322,72 @@ not tell you whether it works. Each needs a real device and a real soft keyboard
 
 ## Order of work
 
-| | |
-|---|---|
-| 1 | Dependency in — done. `AndroidView` showing a file — next |
-| 2 | ~~Colour scheme, and the `Highlighter` analyzer adapter~~ — done |
-| 3 | View model on `Content`; save, dirty, tabs, drafts |
-| 4 | KeyBar and the SmartEdit line operations; caret status |
-| 5 | Tests; word wrap, font size, line numbers, read-only |
-| 6 | Device testing against the frame log, same method as above |
+| | | |
+|---|---|---|
+| 1 | Dependency in; `AndroidView` showing a file | done |
+| 2 | Colour scheme, and the `Highlighter` analyzer adapter | done |
+| 3 | View model on `Content`; save, dirty, tabs | done |
+| 4 | KeyBar and the line operations; caret status | done |
+| 5 | Tests; word wrap, font size, line numbers, read-only | done |
+| 6 | Device testing against the frame log | done |
+
+## Report: where the migration ended up
+
+All six steps are complete. The editor is `io.github.rosemoe:editor:0.24.6` behind an
+`AndroidView`, and nothing of the old Compose text surface remains: `CodeField.kt` was
+deleted in `feaf443`.
+
+### What was built
+
+| Area | File | Note |
+|---|---|---|
+| Scanner seam | `syntax/Tokens.kt` | `TokenKind` and `TokenSink`; the highlighter reports kinds, not colours, so the same scan feeds Compose and sora |
+| Analyzer | `sora/AlchemyLanguage.kt` | `SimpleAnalyzeManager` over `Highlighter.scan`, plus `SymbolPairMatch` and a `NewlineHandler` for block indent |
+| Palette | `sora/EditorPalette.kt` | `CodeSlot` maps our accents onto sora's scheme ids; ids 100-105 are ours, above `END_COLOR_ID` |
+| Span safety | `sora/SafeSpans.kt` | Clamps line indices on read; see "Two crashes" below |
+| Buffers | `sora/BufferStore.kt` | Access-ordered LRU over `Content`; never evicts a dirty buffer |
+| Line ops | `sora/EditorOps.kt` | Indent, dedent, comment, delete line, each one undo step via `batch()` |
+| View | `sora/SoraCodeField.kt` | The `AndroidView` wrapper and its event wiring |
+
+### Measured
+
+| | Before | After |
+|---|---|---|
+| Worst frame, 105 KB file | 6114ms | 18.5ms |
+| Worst frame, 3.17 MB file | not openable | 42.7ms |
+| Edit ceiling | 2 MB | 4 MB (16 MB read-only) |
+
+### Two crashes, and why the second fix is a net rather than a cure
+
+Both were `IndexOutOfBoundsException` thrown from inside sora's draw call, on the main
+thread, which is an unrecoverable process kill.
+
+1. `Index 377 out of bounds for length 1` (`33ee2ba`). `MappedSpans.Builder.addIfNeeded`
+   returns without creating a line when the style has not changed. A file past the
+   highlighting cap carries one uniform style, so a 100k-line document built one line.
+   Fixed with `determine()` plus `addNormalIfNull()`.
+2. `Index 101516 out of bounds for length 98849` (`5b3f198`). `SimpleAnalyzeManager`
+   abandons text collection when a newer request arrives and hands over a truncated
+   document, so a full buffer was coloured against a short copy. Fixed by keeping the
+   `ContentReference` from `reset()` and padding styles to the buffer's real line count.
+
+`SafeSpans` was added alongside the second fix and is deliberately narrow: it clamps the
+line index on `moveToLine` and `getSpansOnLine` and nothing else. It exists because the
+residual race is in someone else's render loop and cannot be closed from outside: styles
+are computed on a worker thread from a copy of the document, with no lock against the
+renderer. Cost is two integer comparisons per visible line per frame. It does not swallow
+exceptions generally, so genuinely wrong colours would still be visible.
+
+### Known gaps
+
+- `Home` no longer toggles between the first non-space character and column zero. sora's
+  `SelectionMovement.LINE_START` goes to column zero only. Recorded at test plan row 3.19.
+- Files that are one very long line are untested.
+- The key bar's drag has no automated coverage. `KeyBarModel` covers the geometry, but the
+  bug fixed in `ad9a1e2` was a composition-lifetime fault that only a Compose UI test can
+  see. One was attempted and abandoned: asserting mid-gesture requires the tree to be idle
+  while a finger is down, and the edge-scroll `LaunchedEffect` holds a frame loop for the
+  whole drag, so `waitForIdle` never returns. It needs `mainClock.autoAdvance = false`.
 
 ## History
 
