@@ -73,10 +73,12 @@ private fun Chip(kind: SearchKind, active: Boolean, onClick: () -> Unit) {
         Modifier
             .clip(RoundedCornerShape(50))
             .background(if (active) primary.copy(alpha = 0.16f) else Color.Transparent)
-            .border(
-                width = if (active) 1.dp else 0.7.dp,
-                color = if (active) primary else MaterialTheme.colorScheme.outlineVariant,
-                shape = RoundedCornerShape(50),
+            .then(
+                if (active) Modifier else Modifier.border(
+                    width = 0.7.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    shape = RoundedCornerShape(50),
+                )
             )
             .clickable(onClick = onClick)
             .padding(start = 11.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
