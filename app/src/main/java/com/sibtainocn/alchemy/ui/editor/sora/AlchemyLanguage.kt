@@ -231,6 +231,8 @@ class SoraSpanSink(length: Int) : TokenSink {
             TokenKind.SELF_REF -> CodeSlot.SELF_REF
             TokenKind.PUNCTUATION -> CodeSlot.PUNCTUATION
             TokenKind.BRACE -> CodeSlot.BRACE
+            TokenKind.INTERPOLATION -> CodeSlot.INTERPOLATION
+            TokenKind.CODE_SPAN -> CodeSlot.CODE_SPAN
         }
     }
 }

@@ -14,10 +14,10 @@ plugins {
 // Version
 //
 // One source of truth, overridable from the command line so CI can build straight from a
-// tag: ./gradlew assembleRelease -PversionName=1.1.5 -PversionCode=56
+// tag: ./gradlew assembleRelease -PversionName=1.1.6 -PversionCode=57
 // ---------------------------------------------------------------------------
-val appVersionName: String = (findProperty("versionName") as String?) ?: "1.1.5"
-val appVersionCode: Int = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 56
+val appVersionName: String = (findProperty("versionName") as String?) ?: "1.1.6"
+val appVersionCode: Int = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 57
 
 /**
  * STABLE, BETA or DEBUG - the middle word of every APK filename.

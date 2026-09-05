@@ -98,6 +98,27 @@ object Highlighter {
         "readonly", "declare", "source", "alias", "unset", "echo", "cd", "set",
     )
 
+    /**
+     * How a language writes a hole in a string literal.
+     *
+     * Every language here spells the same idea differently, and the differences are the
+     * whole point: getting them wrong colours a literal brace in a JSON string as though
+     * it were an expression. So each style says exactly which literals carry holes, and a
+     * literal that does not carry them is painted as one unbroken string.
+     */
+    private enum class Holes {
+        NONE,
+
+        /** `{expr}`, and only in a literal that announced itself: Python's `f`, C#'s `$`. */
+        PREFIXED_BRACE,
+
+        /** `$name` and `${expr}` in a double-quoted literal: Kotlin and the shell. */
+        DOLLAR,
+
+        /** `${expr}`, backticks only, which is what a JavaScript template is. */
+        BACKTICK_DOLLAR,
+    }
+
     private data class Spec(
         val keywords: Set<String>,
         val builtins: Set<String> = emptySet(),
@@ -105,15 +126,28 @@ object Highlighter {
         val blockComment: Pair<String, String>? = null,
         val tripleQuotes: Boolean = false,
         val decoratorChar: Char? = null,
+        val holes: Holes = Holes.NONE,
     )
 
     private fun specFor(lang: Language): Spec = when (lang) {
-        Language.PYTHON -> Spec(PY_KEYWORDS, PY_BUILTINS, "#", tripleQuotes = true, decoratorChar = '@')
-        Language.KOTLIN -> Spec(KT_KEYWORDS, emptySet(), "//", "/*" to "*/", tripleQuotes = true, decoratorChar = '@')
+        Language.PYTHON -> Spec(
+            PY_KEYWORDS, PY_BUILTINS, "#",
+            tripleQuotes = true, decoratorChar = '@', holes = Holes.PREFIXED_BRACE,
+        )
+        Language.KOTLIN -> Spec(
+            KT_KEYWORDS, emptySet(), "//", "/*" to "*/",
+            tripleQuotes = true, decoratorChar = '@', holes = Holes.DOLLAR,
+        )
         Language.JAVA -> Spec(JAVA_KEYWORDS, emptySet(), "//", "/*" to "*/", decoratorChar = '@')
-        Language.JS -> Spec(JS_KEYWORDS, emptySet(), "//", "/*" to "*/", tripleQuotes = false)
-        Language.C_LIKE -> Spec(C_KEYWORDS, emptySet(), "//", "/*" to "*/")
-        Language.SHELL -> Spec(SH_KEYWORDS, emptySet(), "#")
+        Language.JS -> Spec(
+            JS_KEYWORDS, emptySet(), "//", "/*" to "*/",
+            tripleQuotes = false, holes = Holes.BACKTICK_DOLLAR,
+        )
+        // The `$"..."` of C#. Plain C and Rust are left alone deliberately: a brace in a C
+        // string is a brace, and whether one in a Rust string is a placeholder depends on
+        // which macro is being called, which a scanner at this level cannot know.
+        Language.C_LIKE -> Spec(C_KEYWORDS, emptySet(), "//", "/*" to "*/", holes = Holes.PREFIXED_BRACE)
+        Language.SHELL -> Spec(SH_KEYWORDS, emptySet(), "#", holes = Holes.DOLLAR)
         Language.CONFIG -> Spec(emptySet(), emptySet(), "#")
         else -> Spec(emptySet(), emptySet(), null)
     }
@@ -196,31 +230,13 @@ object Highlighter {
             if (spec.tripleQuotes && (c == '"' || c == '\'') &&
                 i + 2 < n && text[i + 1] == c && text[i + 2] == c
             ) {
-                val fence = text.substring(i, i + 3)
-                var end = text.indexOf(fence, i + 3)
-                end = if (end < 0) n else end + 3
-                b.token(i, end, TokenKind.STRING)
-                i = end
+                i = scanStringLiteral(text, i, text.substring(i, i + 3), spec, b)
                 continue
             }
 
-            // Single- or double-quoted string, escape-aware. Also absorbs a preceding
-            // f/r/b/u prefix so f"..." reads as one span.
+            // Single- or double-quoted string, escape-aware.
             if (c == '"' || c == '\'' || c == '`') {
-                val start = if (i > 0 && text[i - 1] in "fFrRbBuU" &&
-                    (i < 2 || !isIdentPart(text[i - 2]))
-                ) i - 1 else i
-                var j = i + 1
-                while (j < n) {
-                    val d = text[j]
-                    if (d == '\\') { j += 2; continue }
-                    if (d == c) { j++; break }
-                    // An unterminated quote should not swallow the rest of the file.
-                    if (d == '\n' && c != '`') break
-                    j++
-                }
-                b.token(start, j.coerceAtMost(n), TokenKind.STRING)
-                i = j.coerceAtLeast(i + 1)
+                i = scanStringLiteral(text, i, c.toString(), spec, b)
                 continue
             }
 
@@ -303,6 +319,149 @@ object Highlighter {
 
             i++
         }
+    }
+
+    /** The letters that may sit in front of a quote and still belong to the literal. */
+    private const val PREFIX_CHARS = "fFrRbBuU$"
+
+    /**
+     * Where the literal that closes at [quoteAt] actually begins.
+     *
+     * Two characters at most, because that is as long as a real prefix gets - `rf`, `bR`,
+     * `f` - and only when what precedes them is not itself part of a word: the `r` in
+     * `var"x"` opens nothing.
+     */
+    private fun prefixStart(text: String, quoteAt: Int): Int {
+        var start = quoteAt
+        while (start > 0 && quoteAt - start < 2 && text[start - 1] in PREFIX_CHARS) start--
+        if (start == quoteAt) return quoteAt
+        return if (start == 0 || !isIdentPart(text[start - 1])) start else quoteAt
+    }
+
+    /** Which marks open a hole in this particular literal. */
+    private data class HoleKinds(val brace: Boolean = false, val dollar: Boolean = false)
+
+    private fun holesOf(style: Holes, prefix: String, fence: String): HoleKinds = when (style) {
+        Holes.NONE -> HoleKinds()
+        // Only when the literal announced itself: `f"{x}"` has a hole, `"{x}"` is text
+        // that happens to contain braces, and colouring the second would be a lie.
+        Holes.PREFIXED_BRACE -> HoleKinds(brace = prefix.any { it == 'f' || it == 'F' || it == '$' })
+        // A single-quoted literal is a character in Kotlin and is literal text in the
+        // shell, so neither carries a hole.
+        Holes.DOLLAR -> HoleKinds(dollar = fence.startsWith("\""))
+        Holes.BACKTICK_DOLLAR -> HoleKinds(dollar = fence == "`")
+    }
+
+    /**
+     * One string literal, from its prefix through to its closing quote.
+     *
+     * All of it is [TokenKind.STRING] except the holes the language allows in it: the
+     * marks that open and close one are [TokenKind.INTERPOLATION] and what sits between
+     * them is [TokenKind.TEXT]. An f-string's braces do not hold string content, they hold
+     * an expression, and reading `f"{total:.2f}"` as one uniform run of colour hides the
+     * only part of it that is code.
+     *
+     * Returns the index just past the literal, which is always past [quoteAt] so the
+     * caller's walk cannot stall.
+     */
+    private fun scanStringLiteral(
+        text: String,
+        quoteAt: Int,
+        fence: String,
+        spec: Spec,
+        b: TokenSink,
+    ): Int {
+        val n = text.length
+        val start = prefixStart(text, quoteAt)
+        val holes = holesOf(spec.holes, text.substring(start, quoteAt), fence)
+        // A triple-quoted block is taken at face value, the way it was before holes
+        // existed: an escape inside a Kotlin raw string is not an escape.
+        val escapes = fence.length == 1
+        val oneLine = fence == "\"" || fence == "'"
+
+        var runStart = start
+        var i = quoteAt + fence.length
+        while (i < n) {
+            val c = text[i]
+            if (escapes && c == '\\') { i = (i + 2).coerceAtMost(n); continue }
+            if (text.startsWith(fence, i)) { i += fence.length; break }
+            // An unterminated quote should not swallow the rest of the file.
+            if (oneLine && c == '\n') break
+
+            if (holes.brace) {
+                // `{{` and `}}` are how a formatted string writes a brace it means
+                // literally, so neither opens anything.
+                if (text.startsWith("{{", i) || text.startsWith("}}", i)) { i += 2; continue }
+                if (c == '{') {
+                    b.token(runStart, i, TokenKind.STRING)
+                    i = paintHole(text, i, marks = 1, b = b)
+                    runStart = i
+                    continue
+                }
+            }
+
+            if (holes.dollar && c == '$' && i + 1 < n) {
+                val next = text[i + 1]
+                if (next == '{') {
+                    b.token(runStart, i, TokenKind.STRING)
+                    i = paintHole(text, i, marks = 2, b = b)
+                    runStart = i
+                    continue
+                }
+                // The short form: `$name`, with no braces to close.
+                if (isIdentStart(next)) {
+                    b.token(runStart, i, TokenKind.STRING)
+                    var j = i + 2
+                    while (j < n && isIdentPart(text[j])) j++
+                    b.token(i, i + 1, TokenKind.INTERPOLATION)
+                    b.token(i + 1, j, TokenKind.TEXT)
+                    i = j
+                    runStart = i
+                    continue
+                }
+            }
+            i++
+        }
+        b.token(runStart, i.coerceAtMost(n), TokenKind.STRING)
+        return i.coerceAtLeast(quoteAt + 1)
+    }
+
+    /**
+     * The hole opening at [at], and everything inside it.
+     *
+     * [marks] is how many characters open it - one for `{`, two for `${`. Braces are
+     * counted so a Python format spec such as `{x:{width}}` ends where it should, and a
+     * quoted string inside the expression is stepped over so that a `}` within it cannot
+     * close the hole early. An unclosed hole ends at the line break rather than running on.
+     */
+    private fun paintHole(text: String, at: Int, marks: Int, b: TokenSink): Int {
+        val n = text.length
+        val open = (at + marks).coerceAtMost(n)
+        var i = open
+        var depth = 1
+        while (i < n) {
+            val c = text[i]
+            if (c == '\n') break
+            if (c == '"' || c == '\'') {
+                i++
+                while (i < n && text[i] != c && text[i] != '\n') {
+                    if (text[i] == '\\') i++
+                    i++
+                }
+                i = (i + 1).coerceAtMost(n)
+                continue
+            }
+            if (c == '{') { depth++; i++; continue }
+            if (c == '}') { depth--; if (depth == 0) break; i++; continue }
+            i++
+        }
+        val closed = depth == 0 && i < n && text[i] == '}'
+        val bodyEnd = i.coerceAtMost(n)
+        b.token(at, open, TokenKind.INTERPOLATION)
+        b.token(open, bodyEnd, TokenKind.TEXT)
+        if (!closed) return bodyEnd
+        b.token(bodyEnd, bodyEnd + 1, TokenKind.INTERPOLATION)
+        return bodyEnd + 1
     }
 
     private fun scanJson(text: String, b: TokenSink) {
@@ -404,7 +563,7 @@ object Highlighter {
                     b.token(lineStart, lineEnd, TokenKind.DECORATOR)
                     inFence = !inFence
                 }
-                inFence -> b.token(lineStart, lineEnd, TokenKind.STRING)
+                inFence -> b.token(lineStart, lineEnd, TokenKind.CODE_SPAN)
                 trimmed.startsWith("#") -> b.token(lineStart, lineEnd, TokenKind.FUNCTION, bold = true)
                 trimmed.startsWith(">") -> b.token(lineStart, lineEnd, TokenKind.COMMENT, italic = true)
                 trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("+ ") ->
@@ -432,7 +591,9 @@ object Highlighter {
                 text[i] == '`' -> {
                     val end = text.indexOf('`', i + 1)
                     if (end in (i + 1) until to) {
-                        b.token(i, end + 1, TokenKind.STRING)
+                        // Raw text rather than a quoted string, and coloured apart from
+                        // one: the string colour belongs to strings.
+                        b.token(i, end + 1, TokenKind.CODE_SPAN)
                         i = end + 1
                         continue
                     }

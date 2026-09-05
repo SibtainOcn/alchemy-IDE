@@ -5,6 +5,70 @@ the name Hazel IDE.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.6] - 2026-09-05
+
+### Fixed
+- **The keyboard no longer flickers away and back while a command runs.** The prompt was
+  disabled for as long as the runner was busy, and a text field that loses `enabled` loses
+  the focus with it, which closes the keyboard; re-enabling it when the output arrived
+  opened the keyboard again. So the terminal was borrowing the keyboard for exactly as long
+  as each command took and handing it back at the end, one to two seconds later. It was
+  also the last row of the scrollback list, which meant the list could scroll it out of
+  existence and dispose it, with the same result. The prompt is a fixed row under the
+  transcript now, composed for as long as the sheet is open, and it stays live while a
+  command runs: the next line can be typed while the last one is still going, and it runs
+  as soon as the runner is free. Output lands behind a keyboard that never went anywhere.
+- **Back closes the keyboard before it closes the terminal.** One press, one thing: the
+  sheet used to go with the keyboard still standing over the editor with nothing to type
+  into. The press after that closes the sheet.
+- **A second Markdown file no longer shows the first one's contents.** The rendered text
+  was cached against a revision counter that counts edits, and switching files is not an
+  edit - so the preview handed back the document it read last time, and kept doing so until
+  something was typed in it. It is held against the buffer as well as the revision now, and
+  the preview is keyed on the path so a second document opens at its own top rather than at
+  the offset the first was left at.
+- **Opening the twenty-first file no longer closes the app when an earlier one is
+  unsaved.** The store looks for a clean buffer to drop by walking its own map, and asking
+  whether a buffer is dirty reads that map - which, being access-ordered, counts a read as
+  a change and invalidates the walk it is in the middle of. The first unsaved buffer met
+  while looking for something to drop took the process down. It walks a snapshot now.
+
+### Changed
+- **Yellow means a quoted string, and nothing else.** It was also carrying Markdown's
+  fenced blocks and backtick spans, which are raw text rather than strings; those have
+  their own colour now.
+- **The holes in an interpolated string are drawn as what they are.** `f"{total:.2f}"` was
+  one uniform run of yellow, which hides the only part of it that is code. The braces are
+  purple and what sits between them is ordinary text, in Python's f-strings, Kotlin's `$name`
+  and `${expr}`, JavaScript template literals, shell expansions and C#'s `$"..."`. Only
+  literals that actually carry holes are treated this way: `{` in a plain Python string, a C
+  string or a JSON value is still a brace, because colouring it otherwise is a claim the
+  reader has no way to check. Doubled braces, format specs, nested braces and quotes inside
+  the expression are all accounted for.
+- **Undo and redo sit above the keyboard rather than at the top of the screen.** They are
+  typing actions and typing happens at the bottom, so reaching to a corner icon and back
+  was a long way to travel to take back a character on a phone held in one hand. They join
+  the status row under the key bar, and leave the bar at the top with two fewer controls
+  competing with the filename. Both remain in the menu.
+- **Leaving with unwritten work offers to save it.** The prompt had two answers, Discard
+  and Cancel, and neither of them was the one most people came for. It is Save, Cancel,
+  Discard now, Discard alone in the error colour, and the same dialog asks the same
+  question everywhere it comes up: leaving the editor, closing a tab, and leaving the app.
+- **The open files are listed in the explorer as well as in the editor.** The strip of what
+  this session has open is session state rather than editor state, and somebody browsing
+  for the next file to work on is exactly the person who wants one tap back to the last
+  one. A tab holding unwritten work shows its dot there too.
+- **Closing the app from the explorer asks about unsaved work first.** Buffers live for as
+  long as the process does, so backing out of the root was the last moment anything could
+  be done about them, and it was silent. Saving several files at once writes them at once,
+  so it costs the slowest write rather than the sum of them.
+- **A finished command lands in one step.** Output, the truncation note and the timing were
+  three separate appends and so three recompositions, which made the transcript grow under
+  the reader as it settled. The scrollback also follows new output only while the end of it
+  is already in view: someone who has scrolled up to read a traceback is no longer dragged
+  back down by the next line, and the jump replaces an animation that a burst of output
+  spent its whole length restarting.
+
 ## [1.1.5] - 2026-09-05
 
 ### Fixed

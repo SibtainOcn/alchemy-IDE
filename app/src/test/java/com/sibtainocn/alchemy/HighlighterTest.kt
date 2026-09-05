@@ -89,6 +89,23 @@ class HighlighterTest {
     }
 
     @Test
+    fun `an f-string hole is purple around white, inside a yellow string`() {
+        val src = """msg = f"hi {name}""""
+        assertEquals(a.string, colorAt(src, src.indexOf("hi"), Language.PYTHON))
+        assertEquals(a.interpolation, colorAt(src, src.indexOf('{'), Language.PYTHON))
+        assertEquals(a.codeText, colorOfFirst(src, "name", Language.PYTHON))
+        assertNotEquals(a.string, colorAt(src, src.indexOf('{'), Language.PYTHON))
+    }
+
+    @Test
+    fun `the string colour is not spent on markdown code`() {
+        // Yellow means a quoted string. A fenced block is raw text and carries its own.
+        val src = "a `snippet` here"
+        assertEquals(a.codeSpan, colorAt(src, src.indexOf('`'), Language.MARKDOWN))
+        assertNotEquals(a.string, colorAt(src, src.indexOf('`'), Language.MARKDOWN))
+    }
+
+    @Test
     fun `decorators are highlighted whole`() {
         val src = "@property\ndef x(self): pass"
         assertEquals(a.decorator, colorAt(src, src.indexOf("propert"), Language.PYTHON))

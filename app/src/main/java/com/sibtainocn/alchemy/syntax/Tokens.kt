@@ -34,6 +34,25 @@ enum class TokenKind {
 
     /** Brackets specifically, which some languages colour apart from other punctuation. */
     BRACE,
+
+    /**
+     * The marks that open and close a hole in an interpolated string: Python's `{` and
+     * `}`, the `$` and `${` of Kotlin, the shell and a JavaScript template.
+     *
+     * Named apart from [BRACE] because it answers a different question. A brace in code is
+     * punctuation; a brace inside a string means the quotes are no longer telling the
+     * truth, and what sits between them is an expression rather than text. What is inside
+     * the hole is reported as [TEXT], because that is what it is: code.
+     */
+    INTERPOLATION,
+
+    /**
+     * Markdown's fenced blocks and backtick spans.
+     *
+     * Raw text rather than a string literal, and coloured apart from one so that the
+     * string colour means a quoted string and nothing else.
+     */
+    CODE_SPAN,
 }
 
 /**
@@ -79,6 +98,8 @@ fun AlchemyAccents.colorOf(kind: TokenKind, lang: Language): Color {
         TokenKind.SELF_REF -> selfRef
         TokenKind.PUNCTUATION -> punctuation
         TokenKind.BRACE -> brace
+        TokenKind.INTERPOLATION -> interpolation
+        TokenKind.CODE_SPAN -> codeSpan
     }
 }
 

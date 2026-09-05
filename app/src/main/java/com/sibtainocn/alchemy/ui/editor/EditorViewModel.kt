@@ -12,6 +12,9 @@ import com.sibtainocn.alchemy.data.Prefs
 import com.sibtainocn.alchemy.ui.editor.sora.BufferStore
 import com.sibtainocn.alchemy.ui.editor.sora.Caret
 import io.github.rosemoe.sora.text.Content
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -224,11 +227,17 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun closeTab(target: File): File? {
         val index = tabs.indexOfFirst { it.absolutePath == target.absolutePath }
         if (index < 0) return file
+        val wasCurrent = file?.absolutePath == target.absolutePath
         buffers.forget(target.absolutePath)
         visits.remove(target.absolutePath)
+        // Forget that this is what is being held, too. The buffer has gone, so opening the
+        // same path again has to read it and register a tab for it - and [load] answers
+        // "already showing that" if this still names it. Closing the open file's tab from
+        // the explorer, where nothing navigates afterwards, is how that is reached.
+        if (wasCurrent) file = null
         val remaining = tabs.filterIndexed { i, _ -> i != index }
         tabs = remaining
-        if (file?.absolutePath != target.absolutePath) return file
+        if (!wasCurrent) return file
         // The one on screen went: fall to its left neighbour, or to the new first when it
         // was already leftmost.
         return remaining.getOrNull(index - 1) ?: remaining.firstOrNull()
@@ -280,6 +289,61 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                     message = it.message ?: "Could not save"
                     onDone(false)
                 }
+        }
+    }
+
+    /**
+     * Writes every buffer holding work that is not on disk, whether or not it is on screen.
+     *
+     * The files are independent of one another and somebody is waiting on all of them, so
+     * they go at once rather than one after another: three writes take as long as the
+     * slowest, not as long as the sum. Only the bookkeeping comes back to this thread, and
+     * only for the ones that landed - a buffer whose write failed is still unsaved, and
+     * marking it otherwise would lose it at the next prompt.
+     *
+     * [onDone] is told whether all of them were written, which is what a caller about to
+     * close the app needs to know.
+     */
+    fun saveAll(onDone: (Boolean) -> Unit = {}) = write(buffers.unsaved(), onDone)
+
+    /**
+     * Writes one tab, on screen or not.
+     *
+     * [save] can only write the file being looked at, which is no use to a tab being closed
+     * from the strip while another one is open.
+     */
+    fun saveTab(target: File, onDone: (Boolean) -> Unit = {}) {
+        val path = target.absolutePath
+        val text = buffers.unsavedText(path)
+        write(if (text == null) emptyList() else listOf(path to text), onDone)
+    }
+
+    private fun write(pending: List<Pair<String, String>>, onDone: (Boolean) -> Unit) {
+        if (pending.isEmpty()) {
+            onDone(true)
+            return
+        }
+        if (saving) return
+        saving = true
+        viewModelScope.launch {
+            val results = coroutineScope {
+                pending.map { (path, text) ->
+                    async { Triple(path, text, FileStore.write(File(path), text).isSuccess) }
+                }.awaitAll()
+            }
+            results.forEach { (path, text, written) -> if (written) buffers.markSaved(path, text) }
+            // Same reasoning as the single save: a write that returns instantly reads as
+            // nothing having happened.
+            delay(220)
+            saving = false
+            refreshFlags()
+            val failed = results.count { !it.third }
+            message = when (failed) {
+                0 -> if (results.size == 1) "Saved" else "Saved ${results.size} files"
+                1 -> "One file could not be saved"
+                else -> "$failed files could not be saved"
+            }
+            onDone(failed == 0)
         }
     }
 
