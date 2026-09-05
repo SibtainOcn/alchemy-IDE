@@ -169,35 +169,54 @@ object KeyBarModel {
     data class Drop(val index: Int, val residual: Float)
 
     /**
+     * How far past halfway a key must be pulled before it takes the next slot, as a
+     * fraction of that slot.
+     *
+     * At the bare halfway mark the two thresholds meet: crossing forward at half a slot
+     * leaves a remainder one pixel short of the mark to cross straight back, so a finger
+     * held still on the boundary shivers a key between two slots for as long as it rests
+     * there. Asking for a fifth of a slot more in each direction puts [DRAG_SLOP] * 2 of
+     * travel - around 15dp, half a fingertip - between "it moved" and "it moved back".
+     */
+    const val DRAG_SLOP = 0.2f
+
+    /**
      * Resolves a drag into a landing slot.
      *
      * [widths] are the laid-out widths of the keys in their current order, [from] is the
      * slot the dragged key holds now, and [dx] is how far it has been pulled from that
-     * slot. A key takes the next slot once it has covered half of it, and that slot's
-     * width then comes off the drag - so one long pull crosses every key it reaches
+     * slot. A key takes the next slot once it has covered half of it plus [slop], and that
+     * slot's width then comes off the drag - so one long pull crosses every key it reaches
      * instead of stopping after the first.
      *
      * [Drop.residual] is what is left over afterwards, and is what keeps the key under
      * the finger rather than snapping it to the slot it has just taken.
      */
-    fun dropTarget(widths: List<Float>, from: Int, dx: Float, gap: Float): Drop {
+    fun dropTarget(
+        widths: List<Float>,
+        from: Int,
+        dx: Float,
+        gap: Float,
+        slop: Float = 0f,
+    ): Drop {
         if (from !in widths.indices) return Drop(from, dx)
         var index = from
         var left = dx
+        val share = 0.5f + slop
         // One direction only, chosen by the way the finger went. Crossing a slot leaves a
         // remainder of up to half its width pointing the other way, and a slot narrower
         // than that on the far side would otherwise read as a crossing straight back.
         if (dx > 0f) {
             while (true) {
                 val step = (widths.getOrNull(index + 1) ?: break) + gap
-                if (step <= 0f || left <= step / 2f) break
+                if (step <= 0f || left <= step * share) break
                 left -= step
                 index++
             }
         } else {
             while (true) {
                 val step = (widths.getOrNull(index - 1) ?: break) + gap
-                if (step <= 0f || left >= -step / 2f) break
+                if (step <= 0f || left >= -step * share) break
                 left += step
                 index--
             }

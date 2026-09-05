@@ -30,6 +30,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   a whole document laid out for nothing, and it was most of the cost of opening anything
   after walking through a few folders.
 
+- **Rearranging the keys above the keyboard works more than once.** The row kept its
+  working order in a `remember` keyed on the saved order, so writing an order back handed
+  out a new state object - while the drag went on writing to the one it had closed over,
+  because a gesture keeps the lambda it started with for as long as it runs. From the
+  second drag onwards every crossing landed in a list nothing rendered: the row stood
+  still under the finger, the held key jittered as it paid for swaps that were not on
+  screen, and the whole bar rearranged itself at once when the finger came up. Moving a
+  key also asks for slightly more than half a slot now, and moving it back asks the same
+  again, so a thumb resting on a boundary no longer shivers a key between two places.
+- **Turning line numbers back on in a very long file no longer closes the app.** The
+  renderer asks for the colours of whichever line it is about to draw, and there were two
+  ways to be asked for a line that had none. A file past the highlighting cap carries one
+  uniform style, and the span builder adds nothing when the style has not changed - not
+  even for the line it was asked about - so a hundred thousand lines built exactly one.
+  Separately, the colours are collected on a background thread that abandons its copy of
+  the document when a newer request arrives, so a full buffer could be coloured against a
+  truncated one. Every line gets a span now, the colours are padded to the buffer's real
+  length rather than the copy's, and a line asked about past the end is answered with the
+  last one there is rather than by throwing in the middle of a frame.
+- **Markdown tables are as wide as what is in them.** Columns were laid out at a fixed
+  width per character cell regardless of content, which is not what a table is, and
+  several places that had no reason to be tinted were drawing their text in the accent
+  colour. Columns are measured from their contents and ordinary text is ordinary again.
+
 ### Changed
 - **Colouring a long file happens off the main thread.** Past about twenty thousand
   characters the scan is no longer run in the middle of composition on every keystroke;
@@ -48,6 +72,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   screen. A tab holding work that is not on disk is never dropped to honour either limit,
   because that work is not the app's to throw away. Reaching the ceiling now needs several
   large files edited and left unsaved at once, rather than twelve files merely opened.
+
+- **The editing surface draws the lines on screen rather than the whole document.** The
+  editor is built on sora-editor now, with this app's own scanner, palette, key bar and
+  file handling on top of it. This is what the gutter fix above was a down payment on:
+  selection, the IME, undo across many lines and horizontal scrolling all cost the
+  viewport instead of the file, so a three megabyte file costs about what a small one
+  does - the worst frame while scrolling one is 42ms, against six seconds before any of
+  this. Pinch-to-zoom, a horizontal scrollbar and smoother scrolling come with it.
+  sora-editor is LGPL-2.1, whose third section permits taking it under the GPL.
+- **Word wrap starts off.** Code has meaningful line ends and a wrapped line hides them.
+  It is still one switch away, and the switch is remembered.
+- **The three-dot menu uses switches instead of the words on and off.** A row that reads
+  "Line numbers  On" tells you the state and not what tapping it does; a switch is both.
+- **The splash is the name alone, centred.** The mark above it was a letter A standing in
+  for a logo that does not exist yet. The shimmer across the name is unchanged.
+- **A file can be edited up to four megabytes rather than two.** Editing is no longer
+  bounded by what a Compose text field could lay out, so the limit is about memory now:
+  four megabytes to edit, sixteen to open read-only.
+
+### Added
+- **The app comes back from a crash knowing what it was.** An uncaught exception on
+  Android ends the process behind a system dialog that names nothing, which leaves the one
+  person who knows what they were doing with no way to say it. The last thing to run now
+  writes the failure down - version, device, thread, trace - and the next launch shows it
+  once, with a button that copies it. It deliberately does not try to continue through the
+  failure: after an error nothing anticipated, the text held in memory may be damaged, and
+  writing that back over a real file is worse than closing. The report is taken off the
+  device as soon as it has been read rather than when the dialog is dismissed, so it
+  cannot survive being swiped away and greet a later launch as though the app had just
+  crashed again.
 
 ## [1.1.2] - 2026-09-04
 

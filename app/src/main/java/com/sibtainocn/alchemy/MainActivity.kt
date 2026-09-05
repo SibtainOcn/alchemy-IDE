@@ -113,6 +113,12 @@ private fun AlchemyApp(startFile: File?) {
     // else draws, so a crash on the very first frame still gets reported.
     var crash by remember { mutableStateOf(CrashGuard.lastReport(context)) }
 
+    // Taken off the device as soon as it has been read, rather than when the dialog is
+    // dismissed. A report that waits for a button survives being swiped away, being
+    // backgrounded, and being killed - and then greets the next launch as though the app
+    // had just crashed again. Once it is in memory the copy on disk has no further job.
+    LaunchedEffect(Unit) { CrashGuard.clear(context) }
+
     var hasAccess by remember { mutableStateOf(Storage.hasAccess(context)) }
     var booting by remember { mutableStateOf(true) }
     var openPath by rememberSaveable { mutableStateOf(startFile?.absolutePath) }
@@ -151,10 +157,7 @@ private fun AlchemyApp(startFile: File?) {
     }
 
     crash?.let { report ->
-        CrashReportDialog(report) {
-            CrashGuard.clear(context)
-            crash = null
-        }
+        CrashReportDialog(report) { crash = null }
     }
 
     AnimatedContent(

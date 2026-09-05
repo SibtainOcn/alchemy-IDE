@@ -234,6 +234,50 @@ class KeyBarModelTest {
         assertEquals(2, KeyBarModel.dropTarget(List(5) { 0f }, 2, 400f, gap = 0f).index)
     }
 
+    // ---- Holding still on a boundary ----
+
+    /** One even slot: a 40 px key plus the 6 px gap after it. */
+    private val step = 46f
+
+    /** Crosses one slot with the least pull that will do it, at the given slop. */
+    private fun crossOnce(slop: Float) =
+        KeyBarModel.dropTarget(evenWidths, from = 3, dx = step * (0.51f + slop), gap = gap, slop = slop)
+
+    /** Feeds a residual back in with a tenth of a slot of backward wobble on it. */
+    private fun wobbleBack(drop: KeyBarModel.Drop, slop: Float) = KeyBarModel.dropTarget(
+        evenWidths, from = drop.index, dx = drop.residual - step * 0.1f, gap = gap, slop = slop,
+    )
+
+    @Test
+    fun `a key that has just crossed does not cross back on a shaky finger`() {
+        // The flicker: settle() runs on every drag event and re-reads the residual, so with
+        // the thresholds touching at exactly half a slot, a finger resting on the boundary
+        // swapped the key back and forth for as long as it rested there.
+        val crossed = crossOnce(KeyBarModel.DRAG_SLOP)
+        assertEquals(4, crossed.index)
+        assertEquals(
+            "the key crossed back on a wobble",
+            4,
+            wobbleBack(crossed, KeyBarModel.DRAG_SLOP).index,
+        )
+    }
+
+    @Test
+    fun `with the thresholds touching, that same wobble does cross back`() {
+        // Names the thing the slop is for: without it, this is a one-way trip to a shimmer.
+        val crossed = crossOnce(slop = 0f)
+        assertEquals(4, crossed.index)
+        assertEquals(3, wobbleBack(crossed, slop = 0f).index)
+    }
+
+    @Test
+    fun `the slop does not stop a long pull from crossing every key it reaches`() {
+        val drop = KeyBarModel.dropTarget(
+            evenWidths, from = 0, dx = step * 5, gap = gap, slop = KeyBarModel.DRAG_SLOP,
+        )
+        assertEquals(5, drop.index)
+    }
+
     @Test
     fun `reorder moves a key without dropping or duplicating any other`() {
         val keys = KeyBarModel.defaultKeys(Language.PYTHON)

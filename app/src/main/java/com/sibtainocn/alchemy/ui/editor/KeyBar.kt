@@ -30,6 +30,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -139,6 +140,12 @@ private fun ShortcutRow(
  * the pointer input and ended the drag - so a key could only ever be moved one place per
  * long-press. Holding a key against either edge scrolls the row underneath it, so a key
  * can be taken the length of the bar without letting go.
+ *
+ * The one rule this row lives by: a gesture reads and writes state that outlives the
+ * composition it started in. `pointerInput` and `LaunchedEffect` both keep the lambda they
+ * were given first, for as long as their keys hold, so anything they touch has to be a
+ * `remember` that is never re-keyed - or the gesture spends itself on a state that nothing
+ * draws.
  */
 @Composable
 private fun ReorderableRow(
@@ -152,7 +159,7 @@ private fun ReorderableRow(
     val saved = remember(language, order) {
         KeyBarModel.applyOrder(KeyBarModel.defaultKeys(language), order)
     }
-    var keys by remember(saved) { mutableStateOf(saved) }
+    var keys by remember { mutableStateOf(saved) }
 
     val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
@@ -167,12 +174,36 @@ private fun ReorderableRow(
     var draggingId by remember { mutableStateOf<String?>(null) }
     var dragDx by remember { mutableStateOf(0f) }
 
+    // Adopt an arrangement that arrived from outside: a different language's key set, or
+    // the one just written back on release.
+    //
+    // remember(saved) is the obvious way to write this and it is the bug that made the bar
+    // unusable after one drag. It hands back a *new* state object every time the order
+    // changes, while the gesture goes on writing to the one it closed over - pointerInput
+    // keeps its first lambda for as long as its key is unchanged, and the key here is the
+    // key id, which never changes. So from the second drag onwards every crossing landed
+    // in a state nothing rendered: the row stood still under the finger, the dragged key
+    // jittered as residuals came off swaps that were not on screen, and the whole row
+    // jumped at once on release. One state object for the life of the row, assigned rather
+    // than re-keyed, is what the gesture needs.
+    if (draggingId == null && keys !== saved) keys = saved
+
+    // Captured once by the gesture, so it has to be the current one rather than the one
+    // that existed when the finger went down.
+    val commitOrder by rememberUpdatedState(onOrderChange)
+
     /** Moves the dragged key past every neighbour the drag has covered. */
     fun settle() {
         val id = draggingId ?: return
         val from = keys.indexOfFirst { it.id == id }
         if (from < 0) return
-        val drop = KeyBarModel.dropTarget(keys.map { widths[it.id] ?: 0f }, from, dragDx, gapPx)
+        val drop = KeyBarModel.dropTarget(
+            widths = keys.map { widths[it.id] ?: 0f },
+            from = from,
+            dx = dragDx,
+            gap = gapPx,
+            slop = KeyBarModel.DRAG_SLOP,
+        )
         if (drop.index != from) {
             keys = KeyBarModel.reorder(keys, from, drop.index)
             dragDx = drop.residual
@@ -190,7 +221,7 @@ private fun ReorderableRow(
     fun release() {
         draggingId = null
         dragDx = 0f
-        onOrderChange(keys.map { it.id })
+        commitOrder(keys.map { it.id })
     }
 
     val dragged = draggingId
