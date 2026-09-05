@@ -159,6 +159,22 @@ fun ExplorerScreen(
         }
     }
 
+    /**
+     * Hands files to the system share sheet, and says so when nothing can take them.
+     *
+     * Folders are dropped on the way through, so a mixed selection shares the files in it
+     * rather than refusing outright.
+     */
+    fun shareFiles(files: List<File>) {
+        if (ExternalOpen.share(context, files)) return
+        scope.launch {
+            snackbar.showSnackbar(
+                if (files.size == 1) "Nothing on this device can share that"
+                else "Nothing on this device can share these"
+            )
+        }
+    }
+
     var sheetFor by remember { mutableStateOf<Entry?>(null) }
     var creating by remember { mutableStateOf(false) }
     var newFile by remember { mutableStateOf(false) }
@@ -511,6 +527,9 @@ fun ExplorerScreen(
                     }
                 }
             },
+            onShare = if (entry.isDir) null else {
+                { sheetFor = null; shareFiles(listOf(entry.file)) }
+            },
             onCut = { vm.stage(entry, Transfer.MOVE); sheetFor = null },
             onCopy = { vm.stage(entry, Transfer.COPY); sheetFor = null },
             onMove = { moving = entry; sheetFor = null },
@@ -619,6 +638,10 @@ fun ExplorerScreen(
             selection = state.selection,
             bytes = state.selectedBytes,
             onDismiss = { selectionActions = false },
+            onShare = {
+                selectionActions = false
+                shareFiles(state.selection.filterNot { it.isDir }.map { it.file })
+            },
             onCopy = { selectionActions = false; vm.stage(state.selection, Transfer.COPY) },
             onCut = { selectionActions = false; vm.stage(state.selection, Transfer.MOVE) },
             onMove = { selectionActions = false; movingSelection = true },

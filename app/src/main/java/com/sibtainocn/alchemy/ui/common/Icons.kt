@@ -197,6 +197,17 @@ object Ico {
     )
 
     val Wrench = stroked("wrench", "M15.6 4.6a5 5 0 0 0 -6 6.4L4.6 16a2 2 0 0 0 2.8 2.8l5-5a5 5 0 0 0 6.4-6l-3 3-2.2-2.2Z")
+
+    // Three nodes and the two lines between them, which is the share glyph everywhere
+    // outside Apple's platforms and the one an Android user reads without thinking.
+    val Share = stroked(
+        "share",
+        "M17.5 4a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0 -4.4",
+        "M6.5 9.8a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0 -4.4",
+        "M17.5 15.6a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0 -4.4",
+        "M8.5 10.9 L15.5 7.2",
+        "M8.5 13.1 L15.5 16.8",
+    )
 }
 
 /** Convenience so call sites read as one line. */

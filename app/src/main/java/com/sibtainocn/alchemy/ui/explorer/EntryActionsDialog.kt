@@ -55,6 +55,8 @@ fun EntryActionsDialog(
     onOpen: () -> Unit,
     /** Hands the file to another app. Null for folders, which have nowhere to go. */
     onOpenWith: (() -> Unit)? = null,
+    /** The system share sheet. Null for folders: Android cannot share a directory. */
+    onShare: (() -> Unit)? = null,
     onTogglePin: () -> Unit,
     onCut: () -> Unit,
     onCopy: () -> Unit,
@@ -108,6 +110,9 @@ fun EntryActionsDialog(
                 )
                 if (onOpenWith != null) {
                     DialogAction(Ico.Eye, "Open with another app", onClick = onOpenWith)
+                }
+                if (onShare != null) {
+                    DialogAction(Ico.Share, "Share", onClick = onShare)
                 }
 
                 DialogAction(

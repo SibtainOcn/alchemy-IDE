@@ -30,6 +30,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   arrives first, a folder that cannot be read is stepped over rather than fatal, and the
   whole thing stops at two thousand results and says that it did.
 
+- **Anything can be shared.** Press and hold a file for Share, or pick several and share
+  them together, and the system's own sheet opens with everything on the device that can
+  take them. The type offered is the narrowest one that is true of the whole set, because a
+  chooser told the files are narrower than they are hides apps that would have worked.
+  Folders are dropped on the way through rather than refused, so a mixed selection shares
+  the files in it. Access is granted to the chosen app for as long as it is on screen, and
+  to nothing else.
+
 - **A transfer says what it is doing while it does it.** A dialog in front of the folder
   with the name of the file being written, the percentage, the speed, and a bar across the
   whole selection rather than the current file. Cancel stops the work; Hide leaves it

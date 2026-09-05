@@ -41,6 +41,7 @@ fun SelectionSheet(
     /** Bytes across the ticked files. Folders are not walked, so this is a floor. */
     bytes: Long,
     onDismiss: () -> Unit,
+    onShare: () -> Unit,
     onCopy: () -> Unit,
     onCut: () -> Unit,
     onMove: () -> Unit,
@@ -82,6 +83,17 @@ fun SelectionSheet(
             HairlineDivider()
             Spacer(Modifier.height(4.dp))
 
+            // Only when there is something Android can carry: a selection of folders has
+            // nothing to share, and an action that does nothing is worse than one that is
+            // not there.
+            if (files > 0) {
+                SheetAction(
+                    Ico.Share,
+                    if (files == 1) "Share" else "Share $files files",
+                    detail = if (folders > 0) "Folders cannot be shared" else null,
+                    onClick = onShare,
+                )
+            }
             SheetAction(Ico.Copy, "Copy", detail = "Paste with the button in the corner", onClick = onCopy)
             SheetAction(Ico.Cut, "Cut", onClick = onCut)
             SheetAction(Ico.Move, "Move to", detail = "Pick the folder and go", onClick = onMove)
