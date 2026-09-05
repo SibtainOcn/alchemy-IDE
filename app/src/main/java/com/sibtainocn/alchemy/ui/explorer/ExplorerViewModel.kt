@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.sibtainocn.alchemy.data.AccessDenied
 import com.sibtainocn.alchemy.data.Entry
 import com.sibtainocn.alchemy.data.FileStore
+import com.sibtainocn.alchemy.data.MediaIndex
 import com.sibtainocn.alchemy.data.Prefs
 import com.sibtainocn.alchemy.data.SortBy
 import com.sibtainocn.alchemy.data.Transfer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -19,8 +21,57 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
 
-/** An entry picked up by cut or copy, waiting for somewhere to land. */
-data class Staged(val entry: Entry, val transfer: Transfer)
+/**
+ * What cut or copy is holding, waiting for somewhere to land.
+ *
+ * A list rather than one entry: the clipboard is the same clipboard whether one thing or
+ * forty was picked up, and a batch that arrived as a loop of single transfers could not
+ * measure itself, could not answer a conflict once for all of it, and could not be
+ * cancelled as a whole.
+ */
+data class Staged(val entries: List<Entry>, val transfer: Transfer) {
+    constructor(entry: Entry, transfer: Transfer) : this(listOf(entry), transfer)
+
+    val count: Int get() = entries.size
+
+    /** What the clipboard strip calls what it is carrying. */
+    val label: String
+        get() = entries.singleOrNull()?.name ?: "$count items"
+}
+
+/** What a running batch is doing, as the dialog reporting it needs to read it. */
+data class TransferJob(
+    val kind: Kind,
+    /** The file being written or removed at this instant. */
+    val name: String?,
+    /** Bytes for a copy or a move, items for a delete. */
+    val done: Long,
+    val total: Long,
+    /** Bytes per second, once there is enough of a run to average over. */
+    val speed: Long? = null,
+    /** How many things the batch was asked to handle. */
+    val count: Int = 1,
+    /**
+     * True once Hide has been tapped.
+     *
+     * The work carries on; only the dialog goes. A transfer is not a modal thing - it can
+     * take minutes, and standing in front of the file list for all of them is the reason
+     * people learn to distrust progress dialogs.
+     */
+    val hidden: Boolean = false,
+) {
+    enum class Kind { COPY, MOVE, DELETE }
+
+    val fraction: Float?
+        get() = if (total > 0L) (done.toFloat() / total).coerceIn(0f, 1f) else null
+
+    val verb: String
+        get() = when (kind) {
+            Kind.COPY -> "Copying"
+            Kind.MOVE -> "Moving"
+            Kind.DELETE -> "Deleting"
+        }
+}
 
 /**
  * A name clash the transfer has stopped on, and the reply it is waiting for.
@@ -53,14 +104,16 @@ data class ExplorerState(
     val denied: Boolean = false,
     /** What cut or copy is holding, or null when nothing is waiting to be pasted. */
     val staged: Staged? = null,
-    /** A transfer in flight, as the line to show while it runs. */
-    val working: String? = null,
-    /** 0f..1f while a transfer reports its size, null while it cannot be measured. */
-    val progress: Float? = null,
+    /** The batch in flight, or null when nothing is running. */
+    val job: TransferJob? = null,
     /** Set while a transfer is stopped on a name that is already taken. */
     val ask: ConflictPrompt? = null,
     /** Absolute paths the user has pinned, wherever in the tree they live. */
     val pinned: Set<String> = emptySet(),
+    /** True while rows are being picked rather than opened. */
+    val selecting: Boolean = false,
+    /** Absolute paths ticked in selection mode. */
+    val selected: Set<String> = emptySet(),
 ) {
     val visible: List<Entry>
         get() {
@@ -75,6 +128,26 @@ data class ExplorerState(
 
     val atRoot: Boolean
         get() = dir.absolutePath == FileStore.storageRoot.absolutePath || dir.parentFile == null
+
+    /**
+     * The ticked rows, in the order they are listed.
+     *
+     * Read from the visible list rather than kept as a second copy of the entries, so a
+     * rename, a sort or a refresh cannot leave the selection describing files that are no
+     * longer what it says they are.
+     */
+    val selection: List<Entry> get() = visible.filter { it.file.absolutePath in selected }
+
+    /**
+     * Bytes ticked, as far as a listing knows.
+     *
+     * A folder's own size is not the size of what is under it, and finding that out means
+     * walking it - which is not something to do on every tap of a row. So folders count as
+     * nothing here and the figure is honest about being a lower bound.
+     */
+    val selectedBytes: Long get() = selection.sumOf { if (it.isDir) 0L else it.sizeBytes }
+
+    val allSelected: Boolean get() = visible.isNotEmpty() && selected.size >= visible.size
 }
 
 class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
@@ -92,6 +165,16 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<ExplorerState> = _state.asStateFlow()
 
     private var loadJob: Job? = null
+
+    /** The batch in flight, held so Cancel has something to cancel. */
+    private var transfer: Job? = null
+
+    // The running average behind the speed readout. Plain fields rather than state: they
+    // are written from the worker thread on every report and read only to produce the one
+    // number that does reach the UI.
+    private var speedAt = 0L
+    private var speedDone = 0L
+    private var speed: Long? = null
 
     fun refresh() = load(_state.value.dir)
 
@@ -114,7 +197,18 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     private fun load(dir: File) {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            _state.update { it.copy(dir = dir, loading = true, error = null, denied = false) }
+            _state.update {
+                it.copy(
+                    dir = dir,
+                    loading = true,
+                    error = null,
+                    denied = false,
+                    // A selection names rows in the folder it was made in. Carrying it
+                    // into the next one would leave paths ticked that are not on screen.
+                    selecting = false,
+                    selected = emptySet(),
+                )
+            }
             prefs.lastDir = dir.absolutePath
             val s = _state.value
             val items = runCatching {
@@ -163,13 +257,13 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun createFile(name: String, onDone: (File?) -> Unit) = viewModelScope.launch {
         FileStore.createFile(_state.value.dir, name)
-            .onSuccess { refresh(); onDone(it) }
+            .onSuccess { announce(listOf(it)); refresh(); onDone(it) }
             .onFailure { fail(it); onDone(null) }
     }
 
     fun createFolder(name: String) = viewModelScope.launch {
         FileStore.createDir(_state.value.dir, name)
-            .onSuccess { refresh() }
+            .onSuccess { announce(listOf(it)); refresh() }
             .onFailure { fail(it) }
     }
 
@@ -179,15 +273,32 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
                 // A pin follows the thing it was put on. Losing it on rename would be a
                 // small betrayal of the one promise a pin makes.
                 repin(entry.file.absolutePath, renamed.absolutePath)
+                // Both names: the one that went and the one that arrived.
+                announce(listOf(entry.file, renamed))
                 refresh()
             }
             .onFailure { fail(it) }
     }
 
-    fun delete(entry: Entry) = viewModelScope.launch {
-        FileStore.delete(entry.file)
-            .onSuccess { repin(entry.file.absolutePath, null); refresh() }
-            .onFailure { fail(it) }
+    fun delete(entry: Entry) = deleteAll(listOf(entry))
+
+    /**
+     * Removes a whole selection.
+     *
+     * Through the same batch engine as one item, because one item is a batch of one and a
+     * second code path for it is a second place for this to go wrong. Progress counts
+     * items rather than bytes, and a file that will not go is reported without stopping
+     * the rest.
+     */
+    fun deleteAll(entries: List<Entry>) {
+        if (entries.isEmpty()) return
+        val targets = entries.map { it.file }
+        run(TransferJob.Kind.DELETE, count = targets.size) {
+            val result = FileStore.deleteAll(targets, onProgress = ::report)
+            targets.forEach { repin(it.absolutePath, null) }
+            announce(targets)
+            result
+        }
     }
 
     // ---- Pins ----
@@ -217,8 +328,15 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Cut, copy, paste ----
 
-    fun stage(entry: Entry, transfer: Transfer) =
-        _state.update { it.copy(staged = Staged(entry, transfer)) }
+    fun stage(entry: Entry, transfer: Transfer) = stage(listOf(entry), transfer)
+
+    /** Picks up a whole selection, and leaves selection mode: the choosing is done. */
+    fun stage(entries: List<Entry>, transfer: Transfer) {
+        if (entries.isEmpty()) return
+        _state.update {
+            it.copy(staged = Staged(entries, transfer), selecting = false, selected = emptySet())
+        }
+    }
 
     fun clearStaged() = _state.update { it.copy(staged = null) }
 
@@ -229,57 +347,186 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Move, without the round trip through the clipboard: pick a folder, go. */
-    fun moveTo(entry: Entry, destination: File) =
-        carryOut(Staged(entry, Transfer.MOVE), destination)
+    fun moveTo(entry: Entry, destination: File) = moveTo(listOf(entry), destination)
 
-    private fun carryOut(staged: Staged, destination: File) = viewModelScope.launch {
-        // A move inside one volume returns almost instantly, but a copy across one does
-        // not, and the folder has to say that something is happening to it.
-        val verb = if (staged.transfer == Transfer.MOVE) "Moving " else "Copying "
-        _state.update { it.copy(working = verb + staged.entry.name, progress = null) }
+    fun moveTo(entries: List<Entry>, destination: File) {
+        if (entries.isEmpty()) return
+        _state.update { it.copy(selecting = false, selected = emptySet()) }
+        carryOut(Staged(entries, Transfer.MOVE), destination)
+    }
 
-        // Only a folder can produce a second clash, so only a folder is offered the
-        // choice that applies to all of them.
-        val repeatable = staged.entry.isDir
+    private fun carryOut(staged: Staged, destination: File) {
+        val sources = staged.entries.map { it.file }
+        val kind =
+            if (staged.transfer == Transfer.MOVE) TransferJob.Kind.MOVE else TransferJob.Kind.COPY
 
-        // Parks the worker on a dialog and hands back whatever comes off it. The finally
-        // matters: a prompt left on screen after its transfer ended could never be
-        // answered by anything.
-        val resolve: suspend (FileStore.Conflict) -> FileStore.Decision = { conflict ->
-            val answer = CompletableDeferred<FileStore.Decision>()
-            _state.update { it.copy(ask = ConflictPrompt(conflict, repeatable, answer)) }
-            try {
-                answer.await()
-            } finally {
-                _state.update { it.copy(ask = null) }
+        // Only a folder, or a selection of more than one thing, can produce a second
+        // clash, so only those are offered the answer that applies to all of them.
+        val repeatable = staged.entries.size > 1 || staged.entries.any { it.isDir }
+
+        run(kind, count = sources.size) {
+            // Parks the worker on a dialog and hands back whatever comes off it. The
+            // finally matters: a prompt left on screen after its transfer ended could
+            // never be answered by anything.
+            val resolve: suspend (FileStore.Conflict) -> FileStore.Decision = { conflict ->
+                val answer = CompletableDeferred<FileStore.Decision>()
+                _state.update { it.copy(ask = ConflictPrompt(conflict, repeatable, answer)) }
+                try {
+                    answer.await()
+                } finally {
+                    _state.update { it.copy(ask = null) }
+                }
+            }
+
+            val result = FileStore.transferAll(sources, destination, staged.transfer, ::report, resolve)
+            // Both ends: what arrived, and for a move what is no longer where it was.
+            announce(result.done + sources)
+            // The clipboard empties either way. A failed paste that stayed armed would
+            // invite the same attempt again, and the message has already said why it will
+            // not work.
+            _state.update { it.copy(staged = null) }
+            result
+        }
+    }
+
+    // ---- Running a batch ----
+
+    /**
+     * The one place a batch runs, whatever it is doing.
+     *
+     * Everything the three operations share lives here: the job that reports them, the
+     * speed averaged out of the progress reports, the cancel that reaches the worker, the
+     * refresh at the end, and the summary of whatever would not go. What the caller
+     * supplies is the work itself.
+     *
+     * Held as a [Job] so Cancel has something to cancel. The copy loops check for
+     * cancellation between slices, so the stop lands within a slice rather than at the end
+     * of the file.
+     */
+    private fun run(
+        kind: TransferJob.Kind,
+        count: Int,
+        block: suspend () -> FileStore.BatchResult,
+    ) {
+        if (_state.value.job != null) return
+        speedAt = 0L
+        speedDone = 0L
+        speed = null
+        _state.update {
+            it.copy(
+                job = TransferJob(kind, name = null, done = 0L, total = 0L, count = count),
+                // The picking is over the moment something is being done with what was
+                // picked. Leaving the ticks on would invite the same action twice.
+                selecting = false,
+                selected = emptySet(),
+            )
+        }
+        transfer = viewModelScope.launch {
+            val outcome = runCatching { block() }
+            _state.update { it.copy(job = null, ask = null) }
+            // Refreshed whichever way it went: a run stopped half way through still left
+            // some of it on disk, and the list has to show what is actually there.
+            refresh()
+            outcome
+                .onSuccess { summarise(it) }
+                .onFailure { e ->
+                    // Cancelling is a decision, not a fault, and needs no message. Neither
+                    // does dismissing a conflict prompt, which is the same decision.
+                    if (e is CancellationException || e is FileStore.TransferAborted) return@onFailure
+                    fail(e)
+                }
+        }
+    }
+
+    /**
+     * Turns a progress report into what the dialog shows.
+     *
+     * Called from the worker thread, already throttled by the file layer. The speed is
+     * averaged rather than instantaneous: a figure recomputed from one 80ms window jumps
+     * between numbers too fast to read, and the one thing a speed is for is estimating.
+     */
+    private fun report(p: FileStore.Progress) {
+        val now = System.currentTimeMillis()
+        if (speedAt == 0L) {
+            speedAt = now
+            speedDone = p.done
+        } else {
+            val elapsed = now - speedAt
+            if (elapsed >= SPEED_WINDOW_MS) {
+                val moved = p.done - speedDone
+                val instant = if (moved > 0) moved * 1000L / elapsed else 0L
+                speed = speed?.let { (it * 7 + instant * 3) / 10 } ?: instant
+                speedAt = now
+                speedDone = p.done
             }
         }
-
-        // Called from the IO thread doing the work, already throttled by FileStore. A
-        // StateFlow update is safe from there and is the whole of what it costs.
-        val onProgress: (FileStore.Progress) -> Unit = { p ->
-            _state.update { it.copy(progress = p.fraction) }
+        _state.update { s ->
+            val job = s.job ?: return@update s
+            s.copy(job = job.copy(name = p.name ?: job.name, done = p.done, total = p.total, speed = speed))
         }
+    }
 
-        val result = when (staged.transfer) {
-            Transfer.MOVE -> FileStore.moveInto(staged.entry.file, destination, onProgress, resolve)
-            Transfer.COPY -> FileStore.copyInto(staged.entry.file, destination, onProgress, resolve)
+    /** Abandons a running batch. What has already been written stays written. */
+    fun cancelTransfer() {
+        transfer?.cancel()
+        transfer = null
+    }
+
+    /** Puts the progress dialog away without touching the work behind it. */
+    fun hideProgress() = _state.update { it.copy(job = it.job?.copy(hidden = true)) }
+
+    fun showProgress() = _state.update { it.copy(job = it.job?.copy(hidden = false)) }
+
+    /**
+     * Says what would not go, and nothing at all when everything did.
+     *
+     * One failure is named, because a name is something to act on. Several are counted,
+     * because a message long enough to list them is one nobody reads.
+     */
+    private fun summarise(result: FileStore.BatchResult) {
+        if (result.failures.isEmpty()) return
+        val (file, cause) = result.failures.first()
+        _state.update {
+            it.copy(
+                error = if (result.failures.size == 1) {
+                    file.name + ": " + (cause.message ?: "could not be done")
+                } else {
+                    "${result.failures.size} items could not be done, starting with ${file.name}"
+                }
+            )
         }
+    }
 
-        // The clipboard empties either way. A failed paste that stayed armed would invite
-        // the same attempt again, and the snackbar has already said why it will not work.
-        _state.update { it.copy(working = null, progress = null, staged = null, ask = null) }
+    /** Tells the rest of the device what changed on disk. */
+    private fun announce(paths: Collection<File>) {
+        val app = getApplication<Application>()
+        viewModelScope.launch { MediaIndex.refresh(app, paths.distinct()) }
+    }
 
-        // Refreshed whichever way it went: a run stopped half way through a folder still
-        // left some of it on disk, and the list has to show what is actually there.
-        refresh()
-        result.onFailure { e ->
-            // Dismissing the prompt is a decision, not a fault, and needs no snackbar.
-            if (e !is FileStore.TransferAborted) fail(e)
-        }
+    // ---- Selection ----
+
+    fun setSelecting(on: Boolean) =
+        _state.update { it.copy(selecting = on, selected = if (on) it.selected else emptySet()) }
+
+    fun toggleSelected(entry: Entry) = _state.update {
+        val path = entry.file.absolutePath
+        val next = if (path in it.selected) it.selected - path else it.selected + path
+        // Ticking a row is how selection mode is entered from a long press as well.
+        it.copy(selecting = true, selected = next)
+    }
+
+    /** All or nothing, from the one control: whichever the current state is not. */
+    fun toggleSelectAll() = _state.update {
+        val all = it.visible.map { entry -> entry.file.absolutePath }.toSet()
+        it.copy(selected = if (it.selected.size >= all.size) emptySet() else all)
     }
 
     fun clearError() = _state.update { it.copy(error = null) }
 
     private fun fail(t: Throwable) = _state.update { it.copy(error = t.message ?: "Something went wrong") }
+
+    private companion object {
+        /** How long a speed sample runs before it is folded into the average. */
+        const val SPEED_WINDOW_MS = 400L
+    }
 }

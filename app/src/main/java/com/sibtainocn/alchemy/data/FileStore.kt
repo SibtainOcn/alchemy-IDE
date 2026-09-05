@@ -228,10 +228,34 @@ object FileStore {
     // and the plain one is kept behind it.
     // -----------------------------------------------------------------------
 
-    /** How far a transfer has got. [total] is 0 when the size could not be measured. */
-    data class Progress(val done: Long, val total: Long) {
+    /**
+     * How far a transfer has got. [total] is 0 when the size could not be measured.
+     *
+     * [name] is whatever is being written at this instant, which for a folder is a file
+     * several levels inside it. It is what a progress dialog has to show: "Moving" and a
+     * percentage says nothing about which of the fifty selected things is stuck.
+     */
+    data class Progress(val done: Long, val total: Long, val name: String? = null) {
         /** 0f..1f, or null when there is nothing to measure against. */
         val fraction: Float? get() = if (total > 0L) (done.toFloat() / total).coerceIn(0f, 1f) else null
+    }
+
+    /**
+     * What a batch did, once it has finished doing it.
+     *
+     * A batch does not stop at the first thing that will not move. One unreadable file in
+     * a selection of forty is a fact about that file, and abandoning the other thirty-nine
+     * because of it leaves the user to work out by hand what did and did not happen. Each
+     * failure is kept with the file it belongs to and reported at the end.
+     */
+    data class BatchResult(
+        /** Where each item landed, or what was removed. */
+        val done: List<File> = emptyList(),
+        /** Items a conflict prompt chose to leave alone. */
+        val skipped: Int = 0,
+        val failures: List<Pair<File, Throwable>> = emptyList(),
+    ) {
+        val ok: Boolean get() = failures.isEmpty()
     }
 
     /** A name at the destination that is already taken. */
@@ -341,6 +365,116 @@ object FileStore {
             session.tally.flush()
             landed
         }.rethrowCancellation()
+    }
+
+    /**
+     * Copies or moves a whole selection into [destDir] as one operation.
+     *
+     * One session and one running total for the batch, which is what makes it a batch
+     * rather than a loop of transfers: the size is measured once so the bar means
+     * something across all of it, "apply to all" at a conflict prompt applies to the rest
+     * of the selection rather than only to the rest of the folder it was asked in, and a
+     * cancel stops everything.
+     *
+     * A move tries the rename first, per item, exactly as the single-item path does, so
+     * moving forty files inside one volume stays forty directory-entry changes and costs
+     * no reading at all.
+     *
+     * Failures are collected rather than thrown. Cancellation is not a failure and is
+     * rethrown, because a cancelled batch has no result to report.
+     */
+    suspend fun transferAll(
+        sources: List<File>,
+        destDir: File,
+        transfer: Transfer,
+        onProgress: ((Progress) -> Unit)? = null,
+        resolve: (suspend (Conflict) -> Decision)? = null,
+    ): BatchResult = withContext(Dispatchers.IO) {
+        val move = transfer == Transfer.MOVE
+        val landed = mutableListOf<File>()
+        val failures = mutableListOf<Pair<File, Throwable>>()
+        var skipped = 0
+        var pending = sources
+
+        if (move) {
+            // The clear road, taken for the whole selection before anything is measured.
+            // Inside one volume every one of these is a directory-entry change, and
+            // walking forty trees to put a number on work that is about to cost nothing
+            // would be the slowest part of the operation by far.
+            val rest = mutableListOf<File>()
+            for (source in sources) {
+                currentCoroutineContext().ensureActive()
+                try {
+                    validate(source, destDir)
+                    val direct = File(destDir, source.name)
+                    if (!direct.exists() && source.renameTo(direct)) landed += direct else rest += source
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    failures += source to t
+                }
+            }
+            pending = rest
+            if (pending.isEmpty()) {
+                onProgress?.invoke(Progress(1L, 1L, null))
+                return@withContext BatchResult(landed, skipped, failures)
+            }
+        }
+
+        // Whatever is left has bytes to carry. Measured once, for all of it, so the bar
+        // walks from one end of the selection to the other instead of restarting per item.
+        val total = pending.sumOf { runCatching { measureIn(it) }.getOrDefault(0L) }
+        if (!move) requireRoom(destDir, total)
+
+        val tally = Tally(total, onProgress)
+        val session = Session(tally, resolve)
+
+        for (source in pending) {
+            currentCoroutineContext().ensureActive()
+            tally.begin(source.name)
+            try {
+                validate(source, destDir)
+                val target = place(source, destDir, session, move)
+                if (target == null) skipped++ else landed += target
+            } catch (t: Throwable) {
+                // A cancelled batch stops here, and so does one stopped at a prompt: that
+                // answer was given about the whole run, not about one item in it.
+                if (t is CancellationException || t is TransferAborted) throw t
+                failures += source to t
+            }
+        }
+        tally.flush()
+        BatchResult(landed, skipped, failures)
+    }
+
+    /**
+     * Removes a whole selection, reporting item by item.
+     *
+     * Bytes are the wrong unit here: unlinking a one-gigabyte file and a one-byte file
+     * cost about the same, so progress counts items and the bar means "eleven of forty
+     * gone" rather than a size that would sit at nothing and then jump.
+     */
+    suspend fun deleteAll(
+        targets: List<File>,
+        onProgress: ((Progress) -> Unit)? = null,
+    ): BatchResult = withContext(Dispatchers.IO) {
+        val removed = mutableListOf<File>()
+        val failures = mutableListOf<Pair<File, Throwable>>()
+        val total = targets.size.toLong()
+
+        targets.forEachIndexed { index, target ->
+            currentCoroutineContext().ensureActive()
+            onProgress?.invoke(Progress(index.toLong(), total, target.name))
+            try {
+                if (!target.exists()) return@forEachIndexed
+                if (!target.deleteRecursively()) throw AccessDenied(target, "delete")
+                removed += target
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                failures += target to t
+            }
+        }
+        onProgress?.invoke(Progress(total, total, null))
+        BatchResult(removed, failures = failures)
     }
 
     /** Total bytes under [file], counting the whole tree. Cancellable. */
@@ -481,6 +615,10 @@ object FileStore {
      * over from an empty file when it does not add up.
      */
     private suspend fun copyFile(source: File, target: File, tally: Tally) {
+        // Named here rather than at the top of the batch: the thing worth reporting is the
+        // file being written, which inside a folder is several levels down from the item
+        // that was selected.
+        tally.begin(source.name)
         val size = source.length()
         val viaChannel = runCatching { channelCopy(source, target, size, tally) }
         val carried = viaChannel.getOrDefault(0L)
@@ -614,13 +752,21 @@ object FileStore {
         private var done = 0L
         private var lastAt = 0L
 
+        /** What is being written now. Carried out on the next report rather than its own. */
+        @Volatile
+        private var current: String? = null
+
+        fun begin(name: String) {
+            current = name
+        }
+
         fun add(n: Long) {
             done += n
             val report = report ?: return
             val now = System.currentTimeMillis()
             if (now - lastAt < REPORT_EVERY_MS) return
             lastAt = now
-            report(Progress(done, total))
+            report(Progress(done, total, current))
         }
 
         /** Un-counts a route that was abandoned, so the retry does not count twice. */
@@ -630,7 +776,7 @@ object FileStore {
 
         /** The last word, sent whether or not the throttle would have allowed it. */
         fun flush() {
-            report?.invoke(Progress(done, total))
+            report?.invoke(Progress(done, total, current))
         }
     }
 }

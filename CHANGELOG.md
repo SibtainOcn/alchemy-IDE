@@ -5,6 +5,47 @@ the name Hazel IDE.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-09-05
+
+### Added
+- **Files can be picked in bulk.** Multi-select in the folder menu, or a press and hold on
+  any row, turns the list into something to choose from: a tap ticks a row, the bar counts
+  what is ticked against what is there and adds up what it weighs, and one control takes
+  all or none. A press and hold while picking, or the corner button, opens what can be done
+  with the set: copy, cut, move to a folder, delete. Rename and Open are deliberately not
+  offered, being answers to a question about one file.
+- **A transfer says what it is doing while it does it.** A dialog in front of the folder
+  with the name of the file being written, the percentage, the speed, and a bar across the
+  whole selection rather than the current file. Cancel stops the work; Hide leaves it
+  running and gets out of the way, because a copy that owns the screen for ten minutes is
+  one nobody starts twice. The corner button keeps turning while it runs and brings the
+  dialog back.
+- **The rest of the device is told what changed.** Writing to shared storage changes the
+  disk; it does not change what Android believes is on it. Until the media index hears
+  about it a copied picture is missing from the gallery, a deleted one is still listed
+  there, and a moved file opens from a path that is not there any more. Every create,
+  rename, copy, move and delete now announces itself, both ends of a transfer, with folders
+  walked to a bounded depth. It is advisory in both directions and cannot fail an operation
+  that has already succeeded on disk.
+
+### Changed
+- **Copy, cut, move and delete are one batch rather than a loop of single operations.**
+  Which is what makes them work at any scale: the selection is measured once so the bar
+  means something across all of it, an "apply to all" at a name clash carries to the rest of
+  the selection rather than stopping at the end of the folder it was asked in, one cancel
+  stops everything, and one file that will not move no longer abandons the other
+  thirty-nine. What would not go is named at the end, or counted when there is more than
+  one of it.
+- **A move inside one volume is still renames.** The batch tries the rename for every item
+  before anything is measured, because walking forty trees to put a percentage on work that
+  is about to cost nothing would be the slowest part of the operation. Only what the kernel
+  refuses is measured and carried.
+- **Progress left the header.** It was two lines and a hairline in the clipboard strip at
+  the top of the screen, which is where a clipboard belongs and not where a job in flight
+  does. The strip is a clipboard again and says what it is carrying; the job has a dialog.
+- **The clipboard carries a selection rather than an entry.** It reads "3 items" when it is
+  holding three.
+
 ## [1.1.6] - 2026-09-05
 
 ### Fixed

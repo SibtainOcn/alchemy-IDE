@@ -169,6 +169,9 @@ fun ExplorerScreen(
     var runtimesOpen by remember { mutableStateOf(false) }
     var closingTab by remember { mutableStateOf<File?>(null) }
     var leaving by remember { mutableStateOf(false) }
+    var selectionActions by remember { mutableStateOf(false) }
+    var deletingSelection by remember { mutableStateOf(false) }
+    var movingSelection by remember { mutableStateOf(false) }
 
     // Setting the terminal up has nothing to do with any one file, so it is reachable
     // from here rather than only from inside the editor.
@@ -235,8 +238,11 @@ fun ExplorerScreen(
         )
     }
 
+    // Selection is a mode, and back leaves a mode before it leaves anything else.
+    BackHandler(enabled = state.selecting) { vm.setSelecting(false) }
+
     // Swallowing back at the root would trap the user in the app.
-    BackHandler(enabled = !state.atRoot || state.searching) { vm.up() }
+    BackHandler(enabled = !state.selecting && (!state.atRoot || state.searching)) { vm.up() }
 
     // At the root, back leaves the app, and unwritten work leaves with it: the buffers
     // live in memory for as long as the process does and no longer. So this is the last
@@ -244,7 +250,10 @@ fun ExplorerScreen(
     // left to be discovered next time the file is opened. The two handlers never overlap:
     // one is for going up, this one is for going out.
     val unsavedOnLeaving = editor.unsavedTabs()
-    BackHandler(enabled = state.atRoot && !state.searching && unsavedOnLeaving.isNotEmpty()) {
+    BackHandler(
+        enabled = !state.selecting && state.atRoot && !state.searching &&
+            unsavedOnLeaving.isNotEmpty()
+    ) {
         leaving = true
     }
 
@@ -267,11 +276,19 @@ fun ExplorerScreen(
             // corner is where a thumb already is, and a second control down there would
             // only ever be the right one half the time.
             val armed = state.staged != null
-            val busy = state.working != null
+            val busy = state.job != null
+            val picking = state.selecting && state.selected.isNotEmpty()
             FloatingActionButton(
                 onClick = {
-                    if (busy) return@FloatingActionButton
-                    if (armed) vm.paste() else creating = true
+                    when {
+                        // A hidden transfer is still a transfer, and the turning button is
+                        // the only thing on screen that says so. Tapping it brings the
+                        // dialog back rather than doing nothing.
+                        busy -> vm.showProgress()
+                        picking -> selectionActions = true
+                        armed -> vm.paste()
+                        else -> creating = true
+                    }
                 },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -279,7 +296,12 @@ fun ExplorerScreen(
                 modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
             ) {
                 AnimatedContent(
-                    targetState = if (busy) 2 else if (armed) 1 else 0,
+                    targetState = when {
+                        busy -> 2
+                        picking -> 3
+                        armed -> 1
+                        else -> 0
+                    },
                     transitionSpec = {
                         (scaleIn(Motion.expressive(), initialScale = 0.7f) + fadeIn(Motion.standard()))
                             .togetherWith(
@@ -289,6 +311,7 @@ fun ExplorerScreen(
                     label = "fab",
                 ) { mode ->
                     when (mode) {
+                        3 -> Icon(Ico.Check, "What to do with the selection")
                         2 -> ShapeLoader(size = 20.dp, color = MaterialTheme.colorScheme.onPrimary)
                         1 -> Icon(Ico.Paste, "Paste here")
                         else -> Icon(Ico.Plus, "New")
@@ -299,17 +322,29 @@ fun ExplorerScreen(
     ) { pad ->
         Column(Modifier.fillMaxSize().padding(pad)) {
 
-            ExplorerBar(
-                state = state,
-                onUp = { vm.up() },
-                onSearchToggle = { vm.setSearching(it) },
-                onQuery = vm::setQuery,
-                onSort = { sortSheet = true },
-                onHome = { vm.jumpTo(FileStore.storageRoot) },
-                onCopyPath = { copyToClipboard(state.dir.absolutePath) },
-                onSetup = if (setup.supported) ({ setupOpen = true }) else null,
-                onRuntimes = if (setup.supported) ({ runtimesOpen = true }) else null,
-            )
+            // Two bars, one at a time. Selection is a mode with its own question - how
+            // many, and of what - and answering it in the corner of the browsing bar
+            // would leave neither legible.
+            if (state.selecting) {
+                SelectionBar(
+                    state = state,
+                    onExit = { vm.setSelecting(false) },
+                    onToggleAll = { vm.toggleSelectAll() },
+                )
+            } else {
+                ExplorerBar(
+                    state = state,
+                    onUp = { vm.up() },
+                    onSearchToggle = { vm.setSearching(it) },
+                    onQuery = vm::setQuery,
+                    onSort = { sortSheet = true },
+                    onHome = { vm.jumpTo(FileStore.storageRoot) },
+                    onCopyPath = { copyToClipboard(state.dir.absolutePath) },
+                    onMultiSelect = { vm.setSelecting(true) },
+                    onSetup = if (setup.supported) ({ setupOpen = true }) else null,
+                    onRuntimes = if (setup.supported) ({ runtimesOpen = true }) else null,
+                )
+            }
 
             Crumbs(dir = state.dir, onJump = vm::jumpTo)
 
@@ -335,17 +370,12 @@ fun ExplorerScreen(
             // The clipboard strip, in the one place it cannot be missed and cannot be
             // mistaken for part of the folder.
             AnimatedVisibility(
-                visible = state.staged != null,
+                visible = state.staged != null && state.job == null,
                 enter = expandVertically(Motion.standard()) + fadeIn(Motion.standard()),
                 exit = shrinkVertically(Motion.snappy()) + fadeOut(Motion.snappy()),
             ) {
                 state.staged?.let { staged ->
-                    ClipboardBar(
-                        staged = staged,
-                        working = state.working,
-                        progress = state.progress,
-                        onCancel = { vm.clearStaged() },
-                    )
+                    ClipboardBar(staged = staged, onCancel = { vm.clearStaged() })
                 }
             }
 
@@ -374,14 +404,31 @@ fun ExplorerScreen(
                     else -> EntryList(
                         entries = state.visible,
                         pinned = state.pinned,
-                        showUpRow = !state.atRoot && state.query.isBlank(),
+                        selecting = state.selecting,
+                        selected = state.selected,
+                        showUpRow = !state.atRoot && state.query.isBlank() && !state.selecting,
                         parentName = state.dir.parentFile?.name.orEmpty(),
                         listState = scrollStates.getOrPut(state.dir.absolutePath) {
                             androidx.compose.foundation.lazy.LazyListState()
                         },
                         onUp = { vm.up() },
-                        onOpen = { e -> if (e.isDir) vm.open(e.file) else openEntry(e.file) },
-                        onHold = { sheetFor = it },
+                        onOpen = { e ->
+                            // In selection mode a tap ticks the row. Nothing opens while
+                            // things are being picked, which is the one rule that keeps a
+                            // mis-tap from navigating away from a selection.
+                            when {
+                                state.selecting -> vm.toggleSelected(e)
+                                e.isDir -> vm.open(e.file)
+                                else -> openEntry(e.file)
+                            }
+                        },
+                        // A long press is what starts a selection everywhere else on the
+                        // platform, and once one is running it is the way back to what can
+                        // be done with it.
+                        onHold = { e ->
+                            if (state.selecting) selectionActions = true else sheetFor = e
+                        },
+                        onHoldSelect = { e -> vm.toggleSelected(e) },
                     )
                 }
             }
@@ -531,6 +578,57 @@ fun ExplorerScreen(
         )
     }
 
+    if (selectionActions && state.selection.isNotEmpty()) {
+        SelectionSheet(
+            selection = state.selection,
+            bytes = state.selectedBytes,
+            onDismiss = { selectionActions = false },
+            onCopy = { selectionActions = false; vm.stage(state.selection, Transfer.COPY) },
+            onCut = { selectionActions = false; vm.stage(state.selection, Transfer.MOVE) },
+            onMove = { selectionActions = false; movingSelection = true },
+            onDelete = { selectionActions = false; deletingSelection = true },
+        )
+    }
+
+    if (deletingSelection) {
+        val picked = state.selection
+        ConfirmDialog(
+            title = if (picked.size == 1) "Delete ${picked.first().name}?" else "Delete ${picked.size} items?",
+            body = "This cannot be undone." +
+                if (picked.any { it.isDir }) " Folders go with everything inside them." else "",
+            confirmLabel = "Delete",
+            danger = true,
+            onDismiss = { deletingSelection = false },
+        ) {
+            deletingSelection = false
+            vm.deleteAll(picked)
+        }
+    }
+
+    if (movingSelection) {
+        val picked = state.selection
+        FolderPickerSheet(
+            start = state.dir,
+            title = if (picked.size == 1) "Move " + picked.first().name else "Move ${picked.size} items",
+            confirmLabel = "Move here",
+            // A folder cannot be moved into itself, and with several picked the first one
+            // that is a folder is the one the picker can actually bar the way to.
+            blocked = picked.firstOrNull { it.isDir }?.file,
+            onDismiss = { movingSelection = false },
+            onPick = { destination ->
+                movingSelection = false
+                vm.moveTo(picked, destination)
+            },
+        )
+    }
+
+    // In front of the folder rather than in a strip above it, and it outlives the screen
+    // it was started from: the work is on the view model, so turning the phone or walking
+    // into another folder does not interrupt it.
+    state.job?.let { job ->
+        TransferDialog(job, onCancel = { vm.cancelTransfer() }, onHide = { vm.hideProgress() })
+    }
+
     // Raised from inside a running transfer, which stays parked until it is answered.
     state.ask?.let { ConflictDialog(it) }
 }
@@ -543,12 +641,7 @@ fun ExplorerScreen(
  * abandons it without touching anything on disk.
  */
 @Composable
-private fun ClipboardBar(
-    staged: Staged,
-    working: String?,
-    progress: Float?,
-    onCancel: () -> Unit,
-) {
+private fun ClipboardBar(staged: Staged, onCancel: () -> Unit) {
     val onContainer = MaterialTheme.colorScheme.onPrimaryContainer
     val moving = staged.transfer == Transfer.MOVE
 
@@ -561,47 +654,68 @@ private fun ClipboardBar(
             Spacer(Modifier.width(13.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    working ?: if (moving) "Ready to move" else "Ready to copy",
+                    if (moving) "Ready to move" else "Ready to copy",
                     style = MaterialTheme.typography.labelMedium,
                     color = onContainer,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    staged.entry.name,
+                    staged.label,
                     style = MaterialTheme.typography.bodySmall,
                     color = onContainer.copy(alpha = 0.72f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (working == null) {
-                BarButton(Ico.Close, "Cancel", tint = onContainer, onClick = onCancel)
-            } else {
-                Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
-                    ShapeLoader(size = 18.dp, color = onContainer)
-                }
-            }
+            BarButton(Ico.Close, "Cancel", tint = onContainer, onClick = onCancel)
         }
+    }
+}
 
-        // A determinate line while the size is known, and nothing at all when it is not:
-        // a bar that cannot say how far along it is should not pretend to.
-        if (working != null && progress != null) {
-            val width by animateFloatAsState(progress, Motion.standard(), label = "transfer")
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(2.dp)
-                    .background(onContainer.copy(alpha = 0.2f))
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth(width.coerceIn(0f, 1f))
-                        .height(2.dp)
-                        .background(onContainer)
+/**
+ * The bar while rows are being picked.
+ *
+ * It replaces the browsing bar rather than growing out of it, because the questions are
+ * different: one is where am I, the other is how many of these have I got. The count leads,
+ * the size under it is what the selection actually weighs, and the tick takes all or none.
+ */
+@Composable
+private fun SelectionBar(
+    state: ExplorerState,
+    onExit: () -> Unit,
+    onToggleAll: () -> Unit,
+) {
+    Column(
+        Modifier
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BarButton(Ico.Close, "Leave selection", onClick = onExit)
+            Column(Modifier.weight(1f).padding(start = 6.dp)) {
+                Text(
+                    "${state.selected.size} / ${state.visible.size}",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextHigh,
+                )
+                Text(
+                    Fmt.size(state.selectedBytes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextLow,
                 )
             }
+            BarButton(
+                Ico.Check,
+                if (state.allSelected) "Select none" else "Select all",
+                tint = if (state.allSelected) MaterialTheme.colorScheme.primary else TextMid,
+                onClick = onToggleAll,
+            )
         }
+        HairlineDivider()
     }
 }
 
@@ -614,6 +728,7 @@ private fun ExplorerBar(
     onSort: () -> Unit,
     onHome: () -> Unit,
     onCopyPath: () -> Unit,
+    onMultiSelect: () -> Unit,
     /** Both null in a build that cannot run code. */
     onSetup: (() -> Unit)?,
     onRuntimes: (() -> Unit)?,
@@ -686,6 +801,9 @@ private fun ExplorerBar(
                         shape = RoundedCornerShape(Radii.md),
                         modifier = Modifier.width(240.dp),
                     ) {
+                        // First, because it is the only thing in here that changes what
+                        // the screen is for rather than acting on it once.
+                        BarMenuRow(Ico.Check, "Multi-select") { menuOpen = false; onMultiSelect() }
                         BarMenuRow(Ico.Copy, "Copy path") { menuOpen = false; onCopyPath() }
                         onSetup?.let {
                             BarMenuRow(Ico.Wrench, "Set up terminal") { menuOpen = false; it() }
@@ -761,12 +879,16 @@ private fun Crumbs(dir: File, onJump: (File) -> Unit) {
 private fun EntryList(
     entries: List<Entry>,
     pinned: Set<String>,
+    selecting: Boolean,
+    selected: Set<String>,
     showUpRow: Boolean,
     parentName: String,
     listState: androidx.compose.foundation.lazy.LazyListState,
     onUp: () -> Unit,
     onOpen: (Entry) -> Unit,
     onHold: (Entry) -> Unit,
+    /** A long press outside selection mode, which is how one is started. */
+    onHoldSelect: (Entry) -> Unit,
 ) {
     LazyColumn(
         state = listState,
@@ -780,8 +902,14 @@ private fun EntryList(
             EntryRow(
                 entry = entry,
                 pinned = entry.file.absolutePath in pinned,
+                selecting = selecting,
+                selected = entry.file.absolutePath in selected,
                 onClick = { onOpen(entry) },
-                onLongClick = { onHold(entry) },
+                onLongClick = {
+                    // Press and hold means the same thing it means everywhere else on the
+                    // platform: start picking, with this row picked.
+                    if (selecting) onHold(entry) else onHoldSelect(entry)
+                },
                 modifier = Modifier.animateItem(
                     fadeInSpec = Motion.standard(),
                     placementSpec = Motion.offset(),
@@ -829,6 +957,8 @@ private fun UpRow(parentName: String, onUp: () -> Unit) {
 private fun EntryRow(
     entry: Entry,
     pinned: Boolean,
+    selecting: Boolean,
+    selected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -837,10 +967,14 @@ private fun EntryRow(
     val pressed by interaction.collectIsPressedAsState()
     // A small settle on press: enough to feel physical, not enough to read as a bounce.
     val scale by animateFloatAsState(if (pressed) 0.976f else 1f, Motion.snappy(), label = "press")
+    // A wash rather than a border. A picked row has to be obvious at a glance down a long
+    // list, and an outline on every second row turns the list into a grid.
+    val wash = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
 
     Row(
         modifier
             .fillMaxWidth()
+            .background(if (selected) wash else Color.Transparent)
             .scale(scale)
             .combinedClickable(
                 interactionSource = interaction,
@@ -851,8 +985,35 @@ private fun EntryRow(
             .padding(horizontal = 16.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.alpha(if (entry.isHidden) 0.55f else 1f)) {
+        Box(
+            Modifier.alpha(if (entry.isHidden) 0.55f else 1f),
+            contentAlignment = Alignment.Center,
+        ) {
             EntryGlyph(entry)
+            // Over the glyph rather than beside it: a tick in its own column would move
+            // every row sideways the moment selection started, which reads as the list
+            // being rebuilt under the finger.
+            if (selecting) {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.86f),
+                            CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (selected) {
+                        Icon(
+                            Ico.Check,
+                            null,
+                            Modifier.size(19.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
+                }
+            }
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
