@@ -54,6 +54,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   several places that had no reason to be tinted were drawing their text in the accent
   colour. Columns are measured from their contents and ordinary text is ordinary again.
 
+- **Leaving the editor asks about every unsaved file, not just the one on screen.** The
+  prompt was gated on the visible buffer, so a file edited and then switched away from was
+  discarded silently on the way out. Closing a single tab already asked; this is the same
+  question for the whole strip.
+
 ### Changed
 - **Colouring a long file happens off the main thread.** Past about twenty thousand
   characters the scan is no longer run in the middle of composition on every keystroke;
@@ -87,11 +92,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   "Line numbers  On" tells you the state and not what tapping it does; a switch is both.
 - **The splash is the name alone, centred.** The mark above it was a letter A standing in
   for a logo that does not exist yet. The shimmer across the name is unchanged.
+- **The splash is on screen for 1.1 seconds rather than 1.5.** One pass of the shine is
+  the whole of it, and the pass was longer than it needed to be.
+
 - **A file can be edited up to four megabytes rather than two.** Editing is no longer
   bounded by what a Compose text field could lay out, so the limit is about memory now:
   four megabytes to edit, sixteen to open read-only.
 
 ### Added
+- **Alchemy is offered for code files sent from other apps, and opens them directly.**
+  It previously claimed only `text/*`, which is not what a file manager sends: Android's
+  own type table reports most source extensions as `application/octet-stream`, so a `.kt`
+  or a `.rs` never reached the list. It now claims the text formats registered outside
+  `text/` as well, and claims `octet-stream` bounded by 57 source extensions rather than
+  outright, so it is not offered as a handler for every unknown binary on the device.
+  Files arriving as `content://` are resolved through the external storage, downloads and
+  media providers rather than only the first of those. A launch that carries a file skips
+  the brand splash, and the activity is `singleTask`, so opening a second file while
+  Alchemy is running reuses the running editor instead of building another one.
+- **Reading a large file reports how far it has got.** Above 256 KB the file is decoded in
+  64 KB chunks and the loader shows the name, the size and a percentage taken from bytes
+  actually consumed off the stream. The chunked path is also interruptible, so backing out
+  of a large file stops the read rather than letting it run to completion in the
+  background, and opening another file cancels the one before it instead of racing it.
+
 - **The app comes back from a crash knowing what it was.** An uncaught exception on
   Android ends the process behind a system dialog that names nothing, which leaves the one
   person who knows what they were doing with no way to say it. The last thing to run now

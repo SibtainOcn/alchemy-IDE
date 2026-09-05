@@ -13,6 +13,7 @@ import com.sibtainocn.alchemy.ui.editor.sora.BufferStore
 import com.sibtainocn.alchemy.ui.editor.sora.Caret
 import io.github.rosemoe.sora.text.Content
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -36,6 +37,17 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     var loading by mutableStateOf(true)
+        private set
+
+    /**
+     * Fraction of the file decoded so far, 0..1. Only meaningful while [loading], and only
+     * advanced for files at or above [FileStore.PROGRESS_FLOOR_BYTES].
+     */
+    var loadProgress by mutableStateOf(0f)
+        private set
+
+    /** Size of the file being opened, in bytes. Drives the choice of loader. */
+    var loadingBytes by mutableStateOf(0L)
         private set
     var saving by mutableStateOf(false)
         private set
@@ -119,15 +131,24 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
      */
     private val visits = LinkedHashSet<String>()
 
+    /** The read in flight, held so a newer open can cancel it. */
+    private var loadJob: Job? = null
+
     fun load(target: File) {
         if (file?.absolutePath == target.absolutePath && !loading) return
         file = target
         rememberTab(target)
         loading = true
+        loadProgress = 0f
+        loadingBytes = target.length()
         mode = if (Language.of(target.name) == Language.MARKDOWN) ViewMode.PREVIEW else ViewMode.EDIT
         modifiers = Modifiers()
         loadKeyOrder()
-        viewModelScope.launch {
+        // Supersede any read still in flight. Without this, backing out of a large file
+        // and opening another leaves the first decode running to completion and racing the
+        // second for `content`.
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             val path = target.absolutePath
             if (FileStore.looksBinary(target)) {
                 readOnly = true
@@ -136,7 +157,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                 loading = false
                 return@launch
             }
-            FileStore.read(target)
+            FileStore.read(target) { loadProgress = it }
                 .onSuccess { text ->
                     content = buffers.open(path, text)
                     readOnly = target.length() > FileStore.EDIT_LIMIT_BYTES || !target.canWrite()
@@ -183,6 +204,15 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     /** True when [target] holds work that is not on disk, whether or not it is on screen. */
     fun hasUnsavedWork(target: File): Boolean = buffers.isDirty(target.absolutePath)
+
+    /**
+     * Every open tab holding work that is not on disk.
+     *
+     * [dirty] answers only for the file on screen, so it cannot gate leaving the editor:
+     * a buffer edited and then switched away from is still unwritten, and closing on that
+     * basis discards it without asking.
+     */
+    fun unsavedTabs(): List<File> = tabs.filter { hasUnsavedWork(it) }
 
     /**
      * Closes a tab and says what should be shown instead.

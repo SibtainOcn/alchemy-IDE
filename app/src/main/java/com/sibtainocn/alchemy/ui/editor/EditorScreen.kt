@@ -179,7 +179,9 @@ fun EditorScreen(
     }
 
     fun leave() {
-        if (vm.dirty) confirmExit = true else onClose()
+        // Every tab, not just the one on screen: switching tabs does not write the
+        // one being left, so vm.dirty alone lets unwritten buffers go silently.
+        if (vm.unsavedTabs().isNotEmpty()) confirmExit = true else onClose()
     }
 
     /** Drops a tab and goes wherever the view model says is left. */
@@ -325,7 +327,11 @@ fun EditorScreen(
                 modifier = Modifier.weight(1f),
             ) { (loading, mode, blocked) ->
                 when {
-                    loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { ShapeLoader(size = 30.dp) }
+                    loading -> LoadingFile(
+                        name = vm.file?.name.orEmpty(),
+                        sizeBytes = vm.loadingBytes,
+                        progress = vm.loadProgress,
+                    )
                     blocked -> EmptyState(
                         "Cannot open this file",
                         vm.message ?: "It is not text, or it is not readable.",
@@ -381,9 +387,13 @@ fun EditorScreen(
     }
 
     if (confirmExit) {
+        val unsaved = vm.unsavedTabs()
         ConfirmDialog(
             title = "Discard changes?",
-            body = "${file.name} has unsaved edits.",
+            body = when (unsaved.size) {
+                0, 1 -> "${unsaved.firstOrNull()?.name ?: file.name} has unsaved edits."
+                else -> unsaved.joinToString(", ") { it.name } + " have unsaved edits."
+            },
             confirmLabel = "Discard",
             danger = true,
             onDismiss = { confirmExit = false },

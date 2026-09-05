@@ -131,7 +131,7 @@ fun PrimaryButton(
 }
 
 /** How long the splash is on screen, and how long one pass of the shine takes. */
-const val SPLASH_MS = 1500
+const val SPLASH_MS = 1100
 
 /** The word between sweeps: dark, but never so dark that it is not there. */
 private val SHIMMER_REST = Color(0xFF3A3A42)

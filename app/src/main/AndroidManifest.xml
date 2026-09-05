@@ -18,9 +18,16 @@
         android:requestLegacyExternalStorage="true"
         android:theme="@style/Theme.Alchemy">
 
+        <!--
+            singleTask so a VIEW intent delivered while the process is alive reaches
+            onNewIntent on the existing activity rather than starting a second one.
+            Activity creation, theme inflation and first composition dominate the latency
+            of opening a file from another app; the read itself is unchanged either way.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Alchemy.Starting">
             <intent-filter>
@@ -28,11 +35,177 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Types the platform already classifies under text/. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.intent.action.EDIT" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
                 <data android:mimeType="text/*" />
+            </intent-filter>
+
+            <!--
+                Text formats registered outside text/. Android's MIME table maps .json to
+                application/json, so a text/* filter alone does not match them.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.EDIT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="application/javascript" />
+                <data android:mimeType="application/x-javascript" />
+                <data android:mimeType="application/ecmascript" />
+                <data android:mimeType="application/xml" />
+                <data android:mimeType="application/xhtml+xml" />
+                <data android:mimeType="application/sql" />
+                <data android:mimeType="application/x-sql" />
+                <data android:mimeType="application/x-sh" />
+                <data android:mimeType="application/x-shellscript" />
+                <data android:mimeType="application/x-bash" />
+                <data android:mimeType="application/x-python" />
+                <data android:mimeType="application/x-python-code" />
+                <data android:mimeType="application/x-yaml" />
+                <data android:mimeType="application/yaml" />
+                <data android:mimeType="application/toml" />
+                <data android:mimeType="application/x-latex" />
+                <data android:mimeType="application/x-httpd-php" />
+                <data android:mimeType="application/x-perl" />
+                <data android:mimeType="application/x-ruby" />
+                <data android:mimeType="application/graphql" />
+                <data android:mimeType="application/svg+xml" />
+            </intent-filter>
+
+            <!--
+                Extension matching for files the platform types as
+                application/octet-stream, which is what its MIME table returns for most
+                source extensions. Declaring octet-stream directly would register Alchemy
+                as a handler for every unknown binary, so the claim is bounded by name.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.EDIT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.py" />
+                <data android:pathPattern=".*\\..*\\.py" />
+                <data android:pathPattern=".*\\.pyw" />
+                <data android:pathPattern=".*\\..*\\.pyw" />
+                <data android:pathPattern=".*\\.pyi" />
+                <data android:pathPattern=".*\\..*\\.pyi" />
+                <data android:pathPattern=".*\\.kt" />
+                <data android:pathPattern=".*\\..*\\.kt" />
+                <data android:pathPattern=".*\\.kts" />
+                <data android:pathPattern=".*\\..*\\.kts" />
+                <data android:pathPattern=".*\\.java" />
+                <data android:pathPattern=".*\\..*\\.java" />
+                <data android:pathPattern=".*\\.js" />
+                <data android:pathPattern=".*\\..*\\.js" />
+                <data android:pathPattern=".*\\.mjs" />
+                <data android:pathPattern=".*\\..*\\.mjs" />
+                <data android:pathPattern=".*\\.cjs" />
+                <data android:pathPattern=".*\\..*\\.cjs" />
+                <data android:pathPattern=".*\\.jsx" />
+                <data android:pathPattern=".*\\..*\\.jsx" />
+                <data android:pathPattern=".*\\.ts" />
+                <data android:pathPattern=".*\\..*\\.ts" />
+                <data android:pathPattern=".*\\.tsx" />
+                <data android:pathPattern=".*\\..*\\.tsx" />
+                <data android:pathPattern=".*\\.json" />
+                <data android:pathPattern=".*\\..*\\.json" />
+                <data android:pathPattern=".*\\.jsonc" />
+                <data android:pathPattern=".*\\..*\\.jsonc" />
+                <data android:pathPattern=".*\\.xml" />
+                <data android:pathPattern=".*\\..*\\.xml" />
+                <data android:pathPattern=".*\\.html" />
+                <data android:pathPattern=".*\\..*\\.html" />
+                <data android:pathPattern=".*\\.htm" />
+                <data android:pathPattern=".*\\..*\\.htm" />
+                <data android:pathPattern=".*\\.css" />
+                <data android:pathPattern=".*\\..*\\.css" />
+                <data android:pathPattern=".*\\.scss" />
+                <data android:pathPattern=".*\\..*\\.scss" />
+                <data android:pathPattern=".*\\.less" />
+                <data android:pathPattern=".*\\..*\\.less" />
+                <data android:pathPattern=".*\\.md" />
+                <data android:pathPattern=".*\\..*\\.md" />
+                <data android:pathPattern=".*\\.markdown" />
+                <data android:pathPattern=".*\\..*\\.markdown" />
+                <data android:pathPattern=".*\\.mdx" />
+                <data android:pathPattern=".*\\..*\\.mdx" />
+                <data android:pathPattern=".*\\.c" />
+                <data android:pathPattern=".*\\..*\\.c" />
+                <data android:pathPattern=".*\\.h" />
+                <data android:pathPattern=".*\\..*\\.h" />
+                <data android:pathPattern=".*\\.cpp" />
+                <data android:pathPattern=".*\\..*\\.cpp" />
+                <data android:pathPattern=".*\\.cxx" />
+                <data android:pathPattern=".*\\..*\\.cxx" />
+                <data android:pathPattern=".*\\.hpp" />
+                <data android:pathPattern=".*\\..*\\.hpp" />
+                <data android:pathPattern=".*\\.cc" />
+                <data android:pathPattern=".*\\..*\\.cc" />
+                <data android:pathPattern=".*\\.cs" />
+                <data android:pathPattern=".*\\..*\\.cs" />
+                <data android:pathPattern=".*\\.rs" />
+                <data android:pathPattern=".*\\..*\\.rs" />
+                <data android:pathPattern=".*\\.go" />
+                <data android:pathPattern=".*\\..*\\.go" />
+                <data android:pathPattern=".*\\.swift" />
+                <data android:pathPattern=".*\\..*\\.swift" />
+                <data android:pathPattern=".*\\.rb" />
+                <data android:pathPattern=".*\\..*\\.rb" />
+                <data android:pathPattern=".*\\.php" />
+                <data android:pathPattern=".*\\..*\\.php" />
+                <data android:pathPattern=".*\\.pl" />
+                <data android:pathPattern=".*\\..*\\.pl" />
+                <data android:pathPattern=".*\\.lua" />
+                <data android:pathPattern=".*\\..*\\.lua" />
+                <data android:pathPattern=".*\\.dart" />
+                <data android:pathPattern=".*\\..*\\.dart" />
+                <data android:pathPattern=".*\\.sh" />
+                <data android:pathPattern=".*\\..*\\.sh" />
+                <data android:pathPattern=".*\\.bash" />
+                <data android:pathPattern=".*\\..*\\.bash" />
+                <data android:pathPattern=".*\\.zsh" />
+                <data android:pathPattern=".*\\..*\\.zsh" />
+                <data android:pathPattern=".*\\.sql" />
+                <data android:pathPattern=".*\\..*\\.sql" />
+                <data android:pathPattern=".*\\.toml" />
+                <data android:pathPattern=".*\\..*\\.toml" />
+                <data android:pathPattern=".*\\.ini" />
+                <data android:pathPattern=".*\\..*\\.ini" />
+                <data android:pathPattern=".*\\.cfg" />
+                <data android:pathPattern=".*\\..*\\.cfg" />
+                <data android:pathPattern=".*\\.conf" />
+                <data android:pathPattern=".*\\..*\\.conf" />
+                <data android:pathPattern=".*\\.properties" />
+                <data android:pathPattern=".*\\..*\\.properties" />
+                <data android:pathPattern=".*\\.yml" />
+                <data android:pathPattern=".*\\..*\\.yml" />
+                <data android:pathPattern=".*\\.yaml" />
+                <data android:pathPattern=".*\\..*\\.yaml" />
+                <data android:pathPattern=".*\\.env" />
+                <data android:pathPattern=".*\\..*\\.env" />
+                <data android:pathPattern=".*\\.gradle" />
+                <data android:pathPattern=".*\\..*\\.gradle" />
+                <data android:pathPattern=".*\\.txt" />
+                <data android:pathPattern=".*\\..*\\.txt" />
+                <data android:pathPattern=".*\\.log" />
+                <data android:pathPattern=".*\\..*\\.log" />
+                <data android:pathPattern=".*\\.csv" />
+                <data android:pathPattern=".*\\..*\\.csv" />
+                <data android:pathPattern=".*\\.tsv" />
+                <data android:pathPattern=".*\\..*\\.tsv" />
+                <data android:pathPattern=".*\\.svg" />
+                <data android:pathPattern=".*\\..*\\.svg" />
+                <data android:pathPattern=".*\\.vue" />
+                <data android:pathPattern=".*\\..*\\.vue" />
             </intent-filter>
         </activity>
     </application>
