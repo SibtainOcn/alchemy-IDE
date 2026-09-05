@@ -18,26 +18,26 @@
 
 ## Features
 
-☑️ Built-in file explorer (browse, search, sort, create, rename, delete, cut, copy & move)  
-☑️ Syntax highlighting for 15+ languages (Python, Kotlin, Java, JS/TS, C/C++, Rust, Go, Markdown, and more)  
-☑️ Multi-file tabs (retains open files and unsaved drafts across tab switches)  
-☑️ In-editor file tree (drawer to browse and switch files without leaving the editor)  
-☑️ Programmer key bar (Ctrl, Tab, directional arrows, Home, End, and code symbols)  
-☑️ Customizable key bar (drag and drop keys into your preferred order per language)  
-☑️ Smart typing & auto indent (bracket and quote pairing, line indentation, and block expansion)  
-☑️ Line editing tools (duplicate line, delete line, and block comment toggle)  
-☑️ Text magnifier & selection handles (floating magnifier when moving the caret)  
-☑️ Scale text & pinch-to-zoom (smooth gesture resizing and font size stepper)  
-☑️ Auto wordwrap and line numbers toggle  
-☑️ Undo / redo support  
-☑️ Markdown preview (rendered tables, task lists, and syntax-highlighted code blocks)  
-☑️ Run code with Termux (execute Python, C, and Go directly on device)  
-☑️ Integrated terminal console (real-time output, command history, and execution timings)  
-☑️ File inspector (view path, size, lines, characters, and quick path copy)  
-☑️ Pin files & folders to top  
-☑️ Conflict resolution dialog (skip, replace, keep both)  
-☑️ Pure True Black dark theme
-☑️ 100% offline & zero network permissions (no internet access required; package downloads run externally through Termux)  
+- [x] Built-in file explorer (browse, search, sort, create, rename, delete, cut, copy & move)  
+- [x] Syntax highlighting for 15+ languages (Python, Kotlin, Java, JS/TS, C/C++, Rust, Go, Markdown, and more)  
+- [x] Multi-file tabs (retains open files and unsaved drafts across tab switches)  
+- [x] In-editor file tree (drawer to browse and switch files without leaving the editor)  
+- [x] Programmer key bar (Ctrl, Tab, directional arrows, Home, End, and code symbols)  
+- [x] Customizable key bar (drag and drop keys into your preferred order per language)  
+- [x] Smart typing & auto indent (bracket and quote pairing, line indentation, and block expansion)  
+- [x] Line editing tools (duplicate line, delete line, and block comment toggle)  
+- [x] Text magnifier & selection handles (floating magnifier when moving the caret)  
+- [x] Scale text & pinch-to-zoom (smooth gesture resizing and font size stepper)  
+- [x] Auto wordwrap and line numbers toggle  
+- [x] Undo / redo support  
+- [x] Markdown preview (rendered tables, task lists, and syntax-highlighted code blocks)  
+- [x] Run code with Termux (execute Python, C, and Go directly on device)  
+- [x] Integrated terminal console (real-time output, command history, and execution timings)  
+- [x] File inspector (view path, size, lines, characters, and quick path copy)  
+- [x] Pin files & folders to top  
+- [x] Conflict resolution dialog (skip, replace, keep both)  
+- [x] Pure True Black dark theme
+- [x] 100% offline & zero network permissions (no internet access required; package downloads run externally through Termux)  
 
 ---
 
