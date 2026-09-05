@@ -37,7 +37,7 @@
 - [x] Pin files & folders to top  
 - [x] Conflict resolution dialog (skip, replace, keep both)  
 - [x] Pure True Black dark theme
-- [x] 100% offline & zero network permissions (no internet access required; package downloads run externally through Termux)  
+
 
 ---
 
