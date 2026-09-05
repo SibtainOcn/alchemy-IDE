@@ -72,7 +72,6 @@ You should have received a copy of the GNU General Public License along with Alc
 
 ---
 
-> *Special thanks to [sora-editor](https://github.com/Rosemoe/sora-editor)*
 
 <div align="right">
 <table><td>
