@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alchemy IDE - Native Android Code Editor &amp; File Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --surface-bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-primary: #09090b;
+            --text-secondary: #52525b;
+            --text-muted: #71717a;
+            --border-subtle: #e4e4e7;
+            --border-strong: #d4d4d8;
+            --accent-black: #09090b;
+            --badge-bg: #f1f5f9;
+            --badge-text: #1e293b;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+            --shadow-md: 0 10px 30px -10px rgba(0, 0, 0, 0.08);
+            --shadow-hover: 0 20px 40px -12px rgba(0, 0, 0, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.55;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
+
+        /* Full width layout wrapper with controlled breath */
+        .page-wrapper {
+            width: 100%;
+            padding: 0 clamp(20px, 3.5vw, 64px);
+            margin: 0 auto;
+        }
+
+        /* Header / Navbar */
+        nav {
+            width: 100%;
+            padding: 24px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+
+        .brand-logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            object-fit: cover;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+        }
+
+        .brand-title {
+            font-size: 1.6rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+        }
+
+        .nav-meta {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .pill-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background-color: var(--badge-bg);
+            color: var(--badge-text);
+            border: 1px solid var(--border-subtle);
+            text-decoration: none;
+            transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .pill-badge:hover {
+            background-color: #e2e8f0;
+            border-color: var(--border-strong);
+            color: var(--text-primary);
+        }
+
+        .nav-link {
+            font-size: 1.05rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .nav-link:hover {
+            color: var(--text-primary);
+        }
+
+        /* Hero Section */
+        .hero {
+            padding: 48px 0 64px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .banner-container {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            margin-bottom: 40px;
+        }
+
+        .banner-img {
+            width: 100%;
+            max-width: 100%;
+            height: auto;
+            max-height: 380px;
+            object-fit: cover;
+            border-radius: 20px;
+            border: 1px solid var(--border-subtle);
+            box-shadow: 0 20px 45px -15px rgba(0, 0, 0, 0.12);
+        }
+
+        .hero-title {
+            font-size: clamp(3.2rem, 5vw, 5.2rem);
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            line-height: 1.08;
+            margin-bottom: 20px;
+            max-width: 1200px;
+        }
+
+        .hero-subtitle {
+            font-size: clamp(1.35rem, 2.2vw, 1.85rem);
+            color: var(--text-secondary);
+            font-weight: 400;
+            max-width: 950px;
+            margin: 0 auto 36px;
+            line-height: 1.45;
+        }
+
+        .hero-actions {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+        }
+
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            background-color: var(--accent-black);
+            color: #ffffff;
+            font-size: 1.2rem;
+            font-weight: 600;
+            padding: 16px 36px;
+            border-radius: 12px;
+            text-decoration: none;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 10px 24px -6px rgba(0, 0, 0, 0.25);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background-color: var(--surface-bg);
+            color: var(--text-primary);
+            font-size: 1.2rem;
+            font-weight: 600;
+            padding: 16px 32px;
+            border-radius: 12px;
+            text-decoration: none;
+            border: 1px solid var(--border-subtle);
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .btn-secondary:hover {
+            background-color: #f1f5f9;
+            border-color: var(--border-strong);
+        }
+
+        .hero-specs-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 28px;
+            flex-wrap: wrap;
+            padding: 16px 28px;
+            background: var(--surface-bg);
+            border-radius: 14px;
+            border: 1px solid var(--border-subtle);
+            margin-top: 12px;
+        }
+
+        .spec-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .spec-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #10b981;
+            border-radius: 50%;
+        }
+
+        /* Section Headers */
+        .section-header {
+            margin: 64px 0 36px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .section-tag {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+        }
+
+        .section-title {
+            font-size: clamp(2.4rem, 3.8vw, 3.4rem);
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1.15;
+        }
+
+        /* Full Width Dynamic Grid */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 24px;
+            width: 100%;
+            margin-bottom: 72px;
+        }
+
+        /* Responsive Column Spans */
+        .col-span-8 {
+            grid-column: span 8;
+        }
+
+        .col-span-6 {
+            grid-column: span 6;
+        }
+
+        .col-span-4 {
+            grid-column: span 4;
+        }
+
+        @media (max-width: 1200px) {
+            .col-span-8 {
+                grid-column: span 12;
+            }
+
+            .col-span-6 {
+                grid-column: span 6;
+            }
+
+            .col-span-4 {
+                grid-column: span 6;
+            }
+        }
+
+        @media (max-width: 768px) {
+
+            .col-span-8,
+            .col-span-6,
+            .col-span-4 {
+                grid-column: span 12;
+            }
+        }
+
+        .feature-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-subtle);
+            border-radius: 18px;
+            padding: 36px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 280px;
+            box-shadow: var(--shadow-sm);
+            transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-hover);
+            border-color: var(--border-strong);
+        }
+
+        .card-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .card-icon-box {
+            width: 52px;
+            height: 52px;
+            border-radius: 12px;
+            background: var(--surface-bg);
+            border: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-primary);
+        }
+
+        .card-tag {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 5px 12px;
+            border-radius: 6px;
+            background-color: var(--badge-bg);
+            color: var(--badge-text);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .card-title {
+            font-size: 1.85rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.25;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .card-desc {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .card-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: auto;
+        }
+
+        .chip {
+            font-size: 0.95rem;
+            font-weight: 500;
+            padding: 6px 14px;
+            border-radius: 8px;
+            background: var(--surface-bg);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+        }
+
+        /* Footer */
+        footer {
+            border-top: 1px solid var(--border-subtle);
+            padding: 64px 0 48px;
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+        }
+
+        .footer-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 24px;
+        }
+
+        .footer-brand-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 28px;
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .footer-link:hover {
+            color: var(--text-primary);
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            font-size: 1rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="page-wrapper">
+        <!-- Navigation -->
+        <nav>
+            <a href="#" class="nav-brand">
+                <img src="../assets/ic_launcher-playstore.png" alt="Alchemy IDE Logo" class="brand-logo"
+                    onerror="this.style.display='none'">
+                <span class="brand-title">Alchemy IDE</span>
+            </a>
+            <div class="nav-meta">
+                <a href="https://github.com/SibtainOcn/alchemy-IDE/blob/main/LICENSE" class="pill-badge">GPL-3.0</a>
+                <a href="https://github.com/SibtainOcn/alchemy-IDE/blob/main/CHANGELOG.md"
+                    class="pill-badge">Changelog</a>
+                <a href="https://github.com/SibtainOcn/alchemy-IDE" class="pill-badge">GitHub Repository</a>
+            </div>
+        </nav>
+
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="banner-container">
+                <img src="../assets/ALCHEMY-BANNER.png" alt="Alchemy IDE Banner" class="banner-img">
+            </div>
+
+            <h1 class="hero-title">Native Code Editor &amp; File Manager for Android</h1>
+            <p class="hero-subtitle">
+                A full-featured code editor built for Android - syntax highlighting, word wrapping, multiple language
+                support, an integrated file explorer, terminal, and on-device code execution via Termux.
+            </p>
+
+            <div class="hero-actions">
+                <a href="https://github.com/SibtainOcn/alchemy-IDE/releases/latest" class="btn-primary">
+                    <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download Latest Release
+                </a>
+                <a href="https://github.com/termux/termux-app/releases" target="_blank" rel="noopener noreferrer"
+                    class="btn-secondary">
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Install Termux
+                </a>
+                <a href="https://github.com/SibtainOcn/alchemy-IDE/blob/main/CHANGELOG.md" class="btn-secondary">
+                    View Changelog
+                </a>
+            </div>
+
+            <div class="hero-specs-bar">
+                <div class="spec-item">
+                    <div class="spec-dot"></div>
+                    <span>Privacy-Focused Core</span>
+                </div>
+                <div class="spec-item">
+                    <div class="spec-dot"></div>
+                    <span>1-Time Toolchain Setup</span>
+                </div>
+                <div class="spec-item">
+                    <div class="spec-dot"></div>
+                    <span>Pure True Black Theme</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Features Grid -->
+        <div class="section-header">
+            <span class="section-tag">Core Architecture</span>
+            <h2 class="section-title">Built for Production Workflow</h2>
+        </div>
+
+        <section class="feature-grid">
+            <!-- File Explorer (8 col) -->
+            <div class="feature-card col-span-8">
+                <div>
+                    <div class="card-top">
+                        <div class="card-icon-box">
+                            <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                        </div>
+                        <span class="card-tag">WORKSPACE</span>
+                    </div>
+                    <h3 class="card-title">Native File Explorer &amp; Drawer Tree</h3>
+                    <p class="card-desc">
+                        Full-capability file management system directly integrated into the editor. Browse, search,
+                        filter, sort, create, rename, batch delete, cut, copy, and move files. Includes an in-editor
+                        file drawer allowing project navigation without breaking context.
+                    </p>
+                </div>
+                <div class="card-chips">
+                    <span class="chip">Conflict Resolution</span>
+                    <span class="chip">Pin Items to Top</span>
+                    <span class="chip">File Inspector</span>
+                    <span class="chip">Quick Path Copy</span>
+                </div>
+            </div>
+
+            <!-- Termux Integration (4 col) -->
+            <div class="feature-card col-span-4">
+                <div>
+                    <div class="card-top">
+                        <div class="card-icon-box">
+                            <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                        <span class="card-tag">RUNTIME</span>
+                    </div>
+                    <h3 class="card-title">Termux Execution Bridge</h3>
+                    <p class="card-desc">
+                        Execute Python, C, and Go directly on your Android device. Integrated console terminal captures
+                        real-time outputs, command history, and exact execution timings.
+                    </p>
+                </div>
+                <div class="card-chips">
+                    <span class="chip">Python</span>
+                    <span class="chip">C / C++</span>
+                    <span class="chip">Go</span>
+                    <span class="chip">Terminal Console</span>
+                </div>
+            </div>
+
+            <!-- Multi-file Tabs (4 col) -->
+            <div class="feature-card col-span-4">
+                <div>
+                    <div class="card-top">
+                        <div class="card-icon-box">
+                            <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                        </div>
+                        <span class="card-tag">BUFFER SYSTEM</span>
+                    </div>
+                    <h3 class="card-title">Multi-File Tabs &amp; State</h3>
+                    <p class="card-desc">
+                        Work with multiple active buffers concurrently. Retains unsaved drafts, scroll offsets, and
+                        active cursors across tab switches and app pauses.
+                    </p>
+                </div>
+                <div class="card-chips">
+                    <span class="chip">Draft Preservation</span>
+                    <span class="chip">Zero Buffer Loss</span>
+                </div>
+            </div>
+
+            <!-- Syntax Highlighting (4 col) -->
+            <div class="feature-card col-span-4">
+                <div>
+                    <div class="card-top">
+                        <div class="card-icon-box">
+                            <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                            </svg>
+                        </div>
+                        <span class="card-tag">LEXER</span>
+                    </div>
+                    <h3 class="card-title">15+ Language Engines</h3>
+                    <p class="card-desc">
+                        High performance syntax highlighting for Python, Kotlin, Java, JavaScript, TypeScript, C, C++,
+                        Rust, Go, Markdown, and configuration formats.
+                    </p>
+                </div>
+                <div class="card-chips">
+                    <span class="chip">Token Highlighting</span>
+                    <span class="chip">Smooth Scrolling</span>
+                </div>
+            </div>
+
+            <!-- Programmer Key Bar (4 col) -->
+            <div class="feature-card col-span-4">
+                <div>
+                    <div class="card-top">
+                        <div class="card-icon-box">
+                            <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                        <span class="card-tag">INPUT METHOD</span>
+                    </div>
+                    <h3 class="card-title">Customizable Key Bar</h3>
+                    <p class="card-desc">
+                        Ergonomic keyboard accessory row with Ctrl, Tab, navigation arrows, Home, End, and coding
+                        symbols. Reorder keys per language via drag and drop.
+                    </p>
+                </div>
+                <div class="card-chips">
+                    <span class="chip">Drag and Drop Order</span>
+                    <span class="chip">Language Profiles</span>
+                </div>
+            </div>
+
+            <!-- Smart Editing Engine (6 col) -->
+            <div class="feature-card col-span-6">
+                <div>
+                    <div class="card-top">
+                        <div class="card-icon-box">
+                            <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                        </div>
+                        <span class="card-tag">EDITOR UTILITIES</span>
+                    </div>
+                    <h3 class="card-title">Smart Typing &amp; Line Tools</h3>
+                    <p class="card-desc">
+                        Automatic bracket and quotation pairing, block auto-indentation, line duplication, one-tap line
+                        deletion, block comment toggling, and floating caret magnifier with precise selection handles.
+                    </p>
+                </div>
+                <div class="card-chips">
+                    <span class="chip">Bracket Pairing</span>
+                    <span class="chip">Auto Indentation</span>
+                    <span class="chip">Pinch to Zoom</span>
+                    <span class="chip">Caret Magnifier</span>
+                </div>
+            </div>
+
+            <!-- Privacy-Focused Core & Markdown Preview (6 col) -->
+            <div class="feature-card col-span-6">
+                <div>
+                    <div class="card-top">
+                        <div class="card-icon-box">
+                            <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                            </svg>
+                        </div>
+                        <span class="card-tag">PRIVACY &amp; PREVIEW</span>
+                    </div>
+                    <h3 class="card-title">Privacy-Focused Core &amp; Markdown Preview</h3>
+                    <p class="card-desc">
+                        Engineered with a privacy-first mindset. Alchemy IDE declares no internet permission, ensuring
+                        your code remains entirely on your device. After a one-time language toolchain installation in
+                        Termux, development and execution run completely offline. Also includes native Markdown live
+                        preview with rendered tables, task lists, and syntax-highlighted code blocks.
+                    </p>
+                </div>
+                <div class="card-chips">
+                    <span class="chip">Zero IDE Network Access</span>
+                    <span class="chip">1-Time Toolchain Setup</span>
+                    <span class="chip">Offline Execution</span>
+                    <span class="chip">Live Markdown Rendering</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer>
+            <div class="footer-content">
+                <div class="footer-brand-info">
+                    <img src="../assets/ic_launcher-playstore.png" alt="Alchemy IDE Logo" class="brand-logo"
+                        onerror="this.style.display='none'">
+                    <div>
+                        <div class="brand-title">Alchemy IDE</div>
+                        <div style="color: var(--text-muted); font-size: 0.95rem;">Native code editor and file manager
+                            for Android</div>
+                    </div>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/SibtainOcn/alchemy-IDE" class="footer-link">GitHub</a>
+                    <a href="https://github.com/SibtainOcn/alchemy-IDE/releases" class="footer-link">Releases</a>
+                    <a href="https://github.com/SibtainOcn/alchemy-IDE/issues" class="footer-link">Issues</a>
+                    <a href="https://github.com/SibtainOcn/alchemy-IDE/blob/main/CHANGELOG.md"
+                        class="footer-link">Changelog</a>
+                    <a href="https://github.com/SibtainOcn/alchemy-IDE/blob/main/CONTRIBUTING.md"
+                        class="footer-link">Contributing</a>
+                    <a href="https://github.com/SibtainOcn/alchemy-IDE/blob/main/LICENSE"
+                        class="footer-link">License</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>&copy; 2026 SibtainOcn. Distributed under GNU General Public License v3.0 or later.</span>
+                <span>Requires Android API 24 (Android 7.0) or higher</span>
+            </div>
+        </footer>
+    </div>
+
+</body>
+
+</html>
