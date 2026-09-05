@@ -119,13 +119,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ### Added
 - **Files Alchemy does not edit open in the app that does.** Tapping a picture, a video,
-  an archive, a PDF or an installer hands it to whatever the device already opens it with,
-  instead of loading it and reporting that it is not text. Text and source still open in
-  the editor, and when something with a text-shaped name turns out to be binary anyway,
-  a `.docx` being the common case, the editor offers the same hand-off rather than
-  stopping at the message. The file is passed as a `content://` URI through a
-  `FileProvider`, read-only and for as long as the receiving app is on screen, because
-  since API 24 a `file://` URI crossing to another process throws.
+  an archive, a PDF, an installer, an Office or OpenDocument file, or a page hands it to
+  whatever the device already opens it with, instead of loading it and reporting that it
+  is not text. Code and plain text still open in the editor.
+
+  HTML is the deliberate case: it is source and it is also a page, so a tap renders it in
+  a browser and **Open in editor**, on the entry's own press-and-hold menu, edits it. That
+  menu also carries **Open with another app** for everything else, so the routing a tap
+  chooses is never the only way in. When a text-shaped name turns out to hold binary
+  anyway, the editor offers the same hand-off rather than stopping at a message.
+
+  The file is passed as a `content://` URI through a `FileProvider`, read-only and for as
+  long as the receiving app is on screen, because since API 24 a `file://` URI crossing to
+  another process throws.
 
 - **Auto-pairing, and block edits that know what a line is.** Typing an opening bracket or
   quote closes it and puts the caret between the halves; Enter after a line that opens a
@@ -134,6 +140,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
   rather than as the several edits it is made of.
 - **The mark on the launch screen is the app icon.** The starting window drew its own
   copy of the old letter A, which no longer matched anything.
+
+- **The file access screen shows what is being asked for.** It led with the app's own
+  mark, which tells the reader who is asking at a moment when they already know. It now
+  leads with the permission's icon in a tonal container, which is the pattern the system's
+  own permission screens use. The last of the old letter A artwork goes with it: the
+  launcher, the launch screen and this screen were three separate drawings of the mark,
+  and there is now one.
 
 - **A launcher icon built from the brand mark.** Adaptive, so the launcher masks it into
   whatever shape the device uses rather than showing a rectangle inside that shape: the

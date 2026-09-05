@@ -332,8 +332,20 @@ fun ExplorerScreen(
             onDismiss = { sheetFor = null },
             onTogglePin = { vm.togglePin(entry); sheetFor = null },
             onOpen = {
-                if (entry.isDir) vm.open(entry.file) else openEntry(entry.file)
+                // Always the editor: this row is the way to edit a file that a tap sends
+                // elsewhere, an .html being the case it exists for.
+                if (entry.isDir) vm.open(entry.file) else onOpenFile(entry.file)
                 sheetFor = null
+            },
+            onOpenWith = if (entry.isDir) null else {
+                {
+                    sheetFor = null
+                    if (!ExternalOpen.open(context, entry.file)) {
+                        scope.launch {
+                            snackbar.showSnackbar("No app on this device opens ${entry.name}")
+                        }
+                    }
+                }
             },
             onCut = { vm.stage(entry, Transfer.MOVE); sheetFor = null },
             onCopy = { vm.stage(entry, Transfer.COPY); sheetFor = null },

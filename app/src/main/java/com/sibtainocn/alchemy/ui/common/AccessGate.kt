@@ -6,7 +6,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -21,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,13 +38,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.sibtainocn.alchemy.R
 import com.sibtainocn.alchemy.ui.theme.Radii
 import com.sibtainocn.alchemy.ui.theme.TextHigh
 import com.sibtainocn.alchemy.ui.theme.TextLow
@@ -68,13 +66,23 @@ fun AccessGate(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Image(
-            painter = painterResource(R.drawable.ic_alchemy_mark),
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            // The brand mark stays white on black; cyan is for things you can press.
-            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(TextHigh),
-        )
+        // The permission's own icon in a tonal container, which is the pattern every
+        // system permission screen uses. A brand mark here would say who is asking, which
+        // the user already knows; a folder says what is being asked for.
+        Box(
+            Modifier
+                .size(88.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Ico.Folder,
+                contentDescription = null,
+                modifier = Modifier.size(40.dp),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
         Spacer(Modifier.height(24.dp))
         Text(
             reason ?: "Alchemy needs file access",

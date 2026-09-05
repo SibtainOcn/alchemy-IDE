@@ -38,6 +38,32 @@ object ExternalOpen {
         "avif" to "image/avif",
         "opus" to "audio/opus",
         "mkv" to "video/x-matroska",
+        "doc" to "application/msword",
+        "docx" to "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "xls" to "application/vnd.ms-excel",
+        "xlsx" to "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "ppt" to "application/vnd.ms-powerpoint",
+        "pptx" to "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "odt" to "application/vnd.oasis.opendocument.text",
+        "ods" to "application/vnd.oasis.opendocument.spreadsheet",
+        "odp" to "application/vnd.oasis.opendocument.presentation",
+        "epub" to "application/epub+zip",
+        "html" to "text/html",
+        "htm" to "text/html",
+    )
+
+    /**
+     * Names that read as documents but are not text to edit.
+     *
+     * The Office and OpenDocument formats are zip containers, so nothing useful comes of
+     * loading one as characters. HTML is the exception that is deliberate rather than
+     * technical: it is source, and it is also a page, and a tap on a page means read it.
+     * Editing it is the "Open in editor" action on the entry's own menu.
+     */
+    private val documents = setOf(
+        "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+        "odt", "ods", "odp", "rtf", "epub",
+        "html", "htm",
     )
 
     /** The type to offer the file as, falling back to a wildcard so a chooser still opens. */
@@ -77,9 +103,12 @@ object ExternalOpen {
      * Content is still checked when the editor does open something, which is what catches
      * a `.docx` or a stray binary behind a text-shaped extension.
      */
-    fun isForAnotherApp(name: String): Boolean = when (FileKind.of(name)) {
-        FileKind.IMAGE, FileKind.VIDEO, FileKind.AUDIO,
-        FileKind.ARCHIVE, FileKind.PDF, FileKind.APP, FileKind.BINARY -> true
-        FileKind.CODE, FileKind.TEXT -> false
+    fun isForAnotherApp(name: String): Boolean {
+        if (name.substringAfterLast('.', "").lowercase() in documents) return true
+        return when (FileKind.of(name)) {
+            FileKind.IMAGE, FileKind.VIDEO, FileKind.AUDIO,
+            FileKind.ARCHIVE, FileKind.PDF, FileKind.APP, FileKind.BINARY -> true
+            FileKind.CODE, FileKind.TEXT -> false
+        }
     }
 }
