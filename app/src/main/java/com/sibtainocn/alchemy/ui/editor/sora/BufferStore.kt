@@ -60,6 +60,22 @@ class BufferStore(
         return entry.content.toString() != entry.savedText
     }
 
+    /**
+     * Every path holding work that is not on disk, with the text that would be written.
+     *
+     * The text is taken here rather than at the point of writing so that what is compared
+     * against afterwards is exactly what went to the file. Keys are snapshotted before any
+     * of them is looked up: this map is access-ordered, so a read reorders it, and reading
+     * while iterating it directly is a concurrent modification.
+     */
+    fun unsaved(): List<Pair<String, String>> = entries.keys.toList().mapNotNull { path ->
+        if (isDirty(path)) entries[path]?.let { path to it.content.toString() } else null
+    }
+
+    /** What [path] would write, or null when it holds nothing the disk does not have. */
+    fun unsavedText(path: String): String? =
+        if (isDirty(path)) entries[path]?.content?.toString() else null
+
     /** Records that [path] now matches what was written to it. */
     fun markSaved(path: String, text: String) {
         entries[path]?.savedText = text
@@ -78,7 +94,12 @@ class BufferStore(
      */
     private fun evict(keep: String) {
         while (entries.size > maxFiles || heldChars > budgetChars) {
-            val victim = entries.keys.firstOrNull { it != keep && !isDirty(it) } ?: return
+            // Over a snapshot of the keys, in order, rather than over the map itself.
+            // `isDirty` reads the map, an access-ordered map counts a read as a change,
+            // and a change while its own iterator is walking it throws - so the first
+            // unsaved buffer met while looking for something to drop took the app down.
+            val victim = entries.keys.toList().firstOrNull { it != keep && !isDirty(it) }
+                ?: return
             entries.remove(victim)
         }
     }

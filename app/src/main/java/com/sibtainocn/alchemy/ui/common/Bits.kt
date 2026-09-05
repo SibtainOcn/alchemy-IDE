@@ -1,5 +1,8 @@
 package com.sibtainocn.alchemy.ui.common
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -207,6 +210,62 @@ fun ConfirmDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextMid) } },
     )
+}
+
+/**
+ * The question asked when work is about to be thrown away: write it, drop it, or stay.
+ *
+ * Three answers rather than two, because the two-answer version - discard or cancel - has
+ * no button for the thing most people came to do. Save leads, cancel is the quiet one, and
+ * discard is the only one drawn in the error colour, since it is the only one that
+ * destroys anything.
+ */
+@Composable
+fun SaveOrDiscardDialog(
+    title: String,
+    body: String,
+    saveLabel: String = "Save",
+    onSave: () -> Unit,
+    onDiscard: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(Radii.lg),
+        title = { Text(title, style = MaterialTheme.typography.titleMedium) },
+        text = { Text(body, style = MaterialTheme.typography.bodyMedium, color = TextMid) },
+        confirmButton = {
+            TextButton(onClick = onSave) {
+                Text(saveLabel, color = MaterialTheme.colorScheme.primary)
+            }
+        },
+        dismissButton = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onDismiss) { Text("Cancel", color = TextMid) }
+                TextButton(onClick = onDiscard) {
+                    Text("Discard", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+    )
+}
+
+/**
+ * The activity this context belongs to, through however many wrappers sit between.
+ *
+ * A composition's context is not reliably the activity: themed wrappers, view-inflation
+ * wrappers and the ones dialogs and popups add all present themselves as a Context. Walking
+ * the base chain is the answer that holds on every API level, where a cast holds only on
+ * the ones that happen not to wrap.
+ */
+fun Context.activity(): Activity? {
+    var current: Context = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
 }
 
 /** A one-pixel-tall spacer that reads as a separator without the weight of a divider. */

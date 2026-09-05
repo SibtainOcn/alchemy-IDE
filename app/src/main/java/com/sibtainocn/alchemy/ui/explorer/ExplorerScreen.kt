@@ -85,6 +85,11 @@ import com.sibtainocn.alchemy.data.FileStore
 import com.sibtainocn.alchemy.data.SortBy
 import com.sibtainocn.alchemy.data.Transfer
 import com.sibtainocn.alchemy.ui.common.ConfirmDialog
+import com.sibtainocn.alchemy.ui.common.SaveOrDiscardDialog
+import com.sibtainocn.alchemy.ui.common.activity
+import com.sibtainocn.alchemy.ui.editor.EditorViewModel
+import com.sibtainocn.alchemy.ui.editor.OpenFilesStrip
+import com.sibtainocn.alchemy.ui.editor.unsavedSummary
 import com.sibtainocn.alchemy.ui.common.EmptyState
 import com.sibtainocn.alchemy.ui.common.EntryGlyph
 import com.sibtainocn.alchemy.ui.common.Fmt
@@ -116,6 +121,16 @@ import java.io.File
 @Composable
 fun ExplorerScreen(
     vm: ExplorerViewModel,
+    /**
+     * The editor's model, for the files this session has open.
+     *
+     * Which files are open is session state rather than editor state: the person browsing
+     * for the next thing to work on is exactly the person who wants one tap back to the
+     * last one, and the unwritten work in those buffers is what makes leaving the app a
+     * question rather than an exit. The explorer only reads that set, closes from it and
+     * asks it to save.
+     */
+    editor: EditorViewModel,
     onOpenFile: (File) -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -152,6 +167,8 @@ fun ExplorerScreen(
     var sortSheet by remember { mutableStateOf(false) }
     var setupOpen by remember { mutableStateOf(false) }
     var runtimesOpen by remember { mutableStateOf(false) }
+    var closingTab by remember { mutableStateOf<File?>(null) }
+    var leaving by remember { mutableStateOf(false) }
 
     // Setting the terminal up has nothing to do with any one file, so it is reachable
     // from here rather than only from inside the editor.
@@ -183,8 +200,53 @@ fun ExplorerScreen(
         )
     }
 
+    // Closing a tab from here throws its buffer away exactly as it does in the editor, so
+    // it asks the same question with the same dialog.
+    closingTab?.let { target ->
+        SaveOrDiscardDialog(
+            title = "Unsaved changes",
+            body = unsavedSummary(listOf(target)),
+            onSave = {
+                closingTab = null
+                editor.saveTab(target) { saved -> if (saved) editor.closeTab(target) }
+            },
+            onDiscard = {
+                closingTab = null
+                editor.closeTab(target)
+            },
+            onDismiss = { closingTab = null },
+        )
+    }
+
+    if (leaving) {
+        SaveOrDiscardDialog(
+            title = "Unsaved changes",
+            body = unsavedSummary(editor.unsavedTabs()),
+            saveLabel = "Save and exit",
+            onSave = {
+                leaving = false
+                editor.saveAll { saved -> if (saved) context.activity()?.finish() }
+            },
+            onDiscard = {
+                leaving = false
+                context.activity()?.finish()
+            },
+            onDismiss = { leaving = false },
+        )
+    }
+
     // Swallowing back at the root would trap the user in the app.
     BackHandler(enabled = !state.atRoot || state.searching) { vm.up() }
+
+    // At the root, back leaves the app, and unwritten work leaves with it: the buffers
+    // live in memory for as long as the process does and no longer. So this is the last
+    // moment anything can be done about it, and the question is asked here rather than
+    // left to be discovered next time the file is opened. The two handlers never overlap:
+    // one is for going up, this one is for going out.
+    val unsavedOnLeaving = editor.unsavedTabs()
+    BackHandler(enabled = state.atRoot && !state.searching && unsavedOnLeaving.isNotEmpty()) {
+        leaving = true
+    }
 
     LaunchedEffect(state.error) {
         state.error?.let {
@@ -250,6 +312,25 @@ fun ExplorerScreen(
             )
 
             Crumbs(dir = state.dir, onJump = vm::jumpTo)
+
+            // What this session has open, in the place somebody browsing for the next file
+            // is already looking. The editor draws the same strip under its own bar; out
+            // here it is the way back into a file without having to walk the tree to it
+            // again, and the dot on a tab is the only sign anywhere in the explorer that
+            // something is holding work that is not on disk.
+            if (editor.tabs.isNotEmpty()) {
+                OpenFilesStrip(
+                    tabs = editor.tabs,
+                    // Nothing is being edited from in here, so no tab is the current one.
+                    current = null,
+                    unsaved = editor::hasUnsavedWork,
+                    onSelect = onOpenFile,
+                    onClose = { target ->
+                        if (editor.hasUnsavedWork(target)) closingTab = target
+                        else editor.closeTab(target)
+                    },
+                )
+            }
 
             // The clipboard strip, in the one place it cannot be missed and cannot be
             // mistaken for part of the folder.

@@ -15,8 +15,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,11 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
@@ -51,6 +45,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -70,7 +65,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sibtainocn.alchemy.data.ExternalOpen
 import com.sibtainocn.alchemy.data.Language
-import com.sibtainocn.alchemy.ui.common.ConfirmDialog
+import com.sibtainocn.alchemy.ui.common.SaveOrDiscardDialog
 import com.sibtainocn.alchemy.ui.common.EmptyState
 import com.sibtainocn.alchemy.ui.common.Fmt
 import com.sibtainocn.alchemy.ui.common.HairlineDivider
@@ -252,17 +247,12 @@ fun EditorScreen(
                 canSave = vm.dirty && !vm.readOnly,
                 showPreviewToggle = isMarkdown,
                 previewing = !editing,
-                showHistory = editing && !vm.readOnly,
                 showTerminal = terminal.supported,
                 showRun = terminal.supported && runtime != null,
                 running = terminal.running,
-                canUndo = vm.canUndo,
-                canRedo = vm.canRedo,
                 onBack = { leave() },
                 onTitle = { treeOpen = true },
                 onTogglePreview = { vm.switchMode(if (editing) ViewMode.PREVIEW else ViewMode.EDIT) },
-                onUndo = { vm.undo() },
-                onRedo = { vm.redo() },
                 onTerminal = {
                     withRunner(needs = null) {
                         terminal.openAt(file.parent ?: file.absolutePath)
@@ -309,7 +299,7 @@ fun EditorScreen(
             // is somewhere else to go: with a single file the strip would be the name
             // from the bar, repeated directly under the bar.
             if (vm.tabs.size > 1) {
-                TabStrip(
+                OpenFilesStrip(
                     tabs = vm.tabs,
                     current = file,
                     unsaved = vm::hasUnsavedWork,
@@ -348,11 +338,16 @@ fun EditorScreen(
                             }
                         },
                     )
-                    mode == ViewMode.PREVIEW -> MarkdownView(
-                        preview.of(vm.content, vm.revision),
-                        Modifier.fillMaxSize(),
-                        vm.previewZoomPct / 100f,
-                    )
+                    // Keyed on the path, so the rendered blocks and the scroll position
+                    // belong to the file being previewed. Without it the second document
+                    // opens at the offset the first one was left at.
+                    mode == ViewMode.PREVIEW -> key(file.absolutePath) {
+                        MarkdownView(
+                            preview.of(vm.content, vm.revision),
+                            Modifier.fillMaxSize(),
+                            vm.previewZoomPct / 100f,
+                        )
+                    }
                     else -> vm.content?.let { buffer ->
                         SoraCodeField(
                             content = buffer,
@@ -389,7 +384,7 @@ fun EditorScreen(
                         onOrderChange = vm::updateKeyOrder,
                         onOutcome = ::handleKey,
                     )
-                    CaretStatus(vm)
+                    CaretStatus(vm, onUndo = { vm.undo() }, onRedo = { vm.redo() })
                 }
             }
 
@@ -398,33 +393,41 @@ fun EditorScreen(
     }
 
     if (confirmExit) {
-        val unsaved = vm.unsavedTabs()
-        ConfirmDialog(
-            title = "Discard changes?",
-            body = when (unsaved.size) {
-                0, 1 -> "${unsaved.firstOrNull()?.name ?: file.name} has unsaved edits."
-                else -> unsaved.joinToString(", ") { it.name } + " have unsaved edits."
+        // Save is the first thing offered, because it is what is nearly always wanted and
+        // because the alternative destroys work. Discard is still there, and still the
+        // only one drawn in the error colour.
+        SaveOrDiscardDialog(
+            title = "Unsaved changes",
+            body = unsavedSummary(vm.unsavedTabs(), file),
+            onSave = {
+                confirmExit = false
+                vm.saveAll { saved -> if (saved) onClose() }
             },
-            confirmLabel = "Discard",
-            danger = true,
+            onDiscard = {
+                confirmExit = false
+                onClose()
+            },
             onDismiss = { confirmExit = false },
-        ) {
-            confirmExit = false
-            onClose()
-        }
+        )
     }
 
     closingTab?.let { target ->
-        ConfirmDialog(
-            title = "Close without saving?",
-            body = target.name + " has edits that have not been written.",
-            confirmLabel = "Close",
-            danger = true,
+        // The same question as leaving the editor, so the same dialog asks it. Closing a
+        // tab throws its buffer away, and being offered only Close and Cancel meant the
+        // answer most people wanted was not on screen.
+        SaveOrDiscardDialog(
+            title = "Unsaved changes",
+            body = unsavedSummary(listOf(target)),
+            onSave = {
+                closingTab = null
+                vm.saveTab(target) { saved -> if (saved) dropTab(target) }
+            },
+            onDiscard = {
+                closingTab = null
+                dropTab(target)
+            },
             onDismiss = { closingTab = null },
-        ) {
-            closingTab = null
-            dropTab(target)
-        }
+        )
     }
 
     TerminalSheet(terminal, onOpenFile = onOpenFile)
@@ -462,98 +465,32 @@ fun EditorScreen(
 }
 
 /**
- * The open files, as a strip of names under the bar.
+ * What the unsaved-work prompt says it is about to lose.
  *
- * Reduced to the two things a tab is for on a phone: getting back to a file, and getting
- * rid of one. No glyph, no path, no close-others menu. A file with unwritten edits shows
- * a dot where its cross would be, which is the one piece of state a tab has to carry and
- * the one place there is room to put it.
+ * Named rather than counted: "3 files have unsaved edits" tells somebody they are about
+ * to lose something without telling them what, and the whole point of asking is that they
+ * can answer. Past four names it becomes a count, because a dialog is not a list.
+ */
+fun unsavedSummary(unsaved: List<File>, fallback: File? = null): String = when {
+    unsaved.isEmpty() -> "${fallback?.name.orEmpty()} has edits that have not been written."
+    unsaved.size == 1 -> "${unsaved.first().name} has edits that have not been written."
+    unsaved.size <= 4 ->
+        unsaved.joinToString(", ") { it.name } + " have edits that have not been written."
+    else -> "${unsaved.size} files have edits that have not been written."
+}
+
+/**
+ * The status row under the key bar: where the caret is, and how to take back what it did.
+ *
+ * Undo and redo live here rather than in the bar at the top. They are typing actions, and
+ * typing happens at the bottom of the screen: reaching over the whole document to a corner
+ * icon and back is a long way to travel to fix a character, on a phone held in one hand.
+ * The bar had seven controls beside a filename and this is two of them gone from it. They
+ * are still in the menu, and the key bar's own row is left alone, since that is the
+ * language's keys and these are the editor's.
  */
 @Composable
-private fun TabStrip(
-    tabs: List<File>,
-    current: File,
-    unsaved: (File) -> Boolean,
-    onSelect: (File) -> Unit,
-    onClose: (File) -> Unit,
-) {
-    val scroll = rememberLazyListState()
-
-    // The open file changes from the tree and from closing a tab as well as from a tap in
-    // here, and in those cases it can easily be off the end of the strip.
-    LaunchedEffect(current.absolutePath, tabs.size) {
-        val index = tabs.indexOfFirst { it.absolutePath == current.absolutePath }
-        if (index >= 0) runCatching { scroll.animateScrollToItem(index) }
-    }
-
-    LazyRow(
-        state = scroll,
-        modifier = Modifier.fillMaxWidth().background(InkRaised),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        items(tabs, key = { it.absolutePath }) { tab ->
-            Tab(
-                file = tab,
-                active = tab.absolutePath == current.absolutePath,
-                unsaved = unsaved(tab),
-                onSelect = { onSelect(tab) },
-                onClose = { onClose(tab) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun Tab(
-    file: File,
-    active: Boolean,
-    unsaved: Boolean,
-    onSelect: () -> Unit,
-    onClose: () -> Unit,
-) {
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(Radii.xs))
-            .background(if (active) InkHigh else Color.Transparent)
-            .clickable(onClick = onSelect)
-            .padding(start = 11.dp, end = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            file.name,
-            style = MaterialTheme.typography.bodySmall,
-            color = if (active) TextHigh else TextMid,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            // Long enough for a real filename, short enough that three tabs still fit on
-            // a phone before anything has to be scrolled to.
-            modifier = Modifier.widthIn(max = 150.dp),
-        )
-        Box(
-            Modifier
-                .padding(start = 3.dp)
-                .size(26.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onClose),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (unsaved) {
-                Box(
-                    Modifier
-                        .size(7.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
-                )
-            } else {
-                Icon(Ico.Close, "Close " + file.name, Modifier.size(12.dp), tint = TextLow)
-            }
-        }
-    }
-}
-
-/** Line/column readout - small, but it is the thing you look for when a stack trace names a line. */
-@Composable
-private fun CaretStatus(vm: EditorViewModel) {
+private fun CaretStatus(vm: EditorViewModel, onUndo: () -> Unit, onRedo: () -> Unit) {
     val accents = LocalAccents.current
     // Reported by the editor as the caret moves, rather than worked out from the buffer.
     val caret = vm.caret
@@ -565,7 +502,7 @@ private fun CaretStatus(vm: EditorViewModel) {
         Modifier
             .fillMaxWidth()
             .background(InkRaised)
-            .padding(horizontal = 16.dp, vertical = 5.dp),
+            .padding(start = 16.dp, end = 6.dp, top = 1.dp, bottom = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -581,6 +518,39 @@ private fun CaretStatus(vm: EditorViewModel) {
             fontSize = 11.sp,
             color = if (vm.autoPair) accents.gutterActive.copy(alpha = 0.7f) else accents.comment,
         )
+        StatusIcon(Ico.Undo, "Undo", enabled = vm.canUndo, onClick = onUndo)
+        StatusIcon(Ico.Redo, "Redo", enabled = vm.canRedo, onClick = onRedo)
+    }
+}
+
+/**
+ * A control sized for the status row rather than for the bar.
+ *
+ * Smaller than [BarIcon] because the row it sits in is a readout, and a full-height button
+ * in it would make the row a second toolbar. Still 34dp of touch target, which is what a
+ * thumb resting on the keyboard needs.
+ */
+@Composable
+private fun StatusIcon(
+    icon: ImageVector,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        Modifier
+            .padding(start = 2.dp)
+            .size(34.dp)
+            .clip(RoundedCornerShape(Radii.xs))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            label,
+            Modifier.size(17.dp),
+            tint = if (enabled) TextHigh else TextLow.copy(alpha = 0.35f),
+        )
     }
 }
 
@@ -593,17 +563,12 @@ private fun EditorBar(
     canSave: Boolean,
     showPreviewToggle: Boolean,
     previewing: Boolean,
-    showHistory: Boolean,
-    canUndo: Boolean,
-    canRedo: Boolean,
     showTerminal: Boolean,
     showRun: Boolean,
     running: Boolean,
     onBack: () -> Unit,
     onTitle: () -> Unit,
     onTogglePreview: () -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
     onTerminal: () -> Unit,
     onRun: () -> Unit,
     onSave: () -> Unit,
@@ -684,27 +649,6 @@ private fun EditorBar(
                 tint = if (running) TextLow.copy(alpha = 0.45f)
                 else MaterialTheme.colorScheme.primary,
                 onClick = onRun,
-            )
-        }
-
-        // Undo and redo are in the menu as well, but taking back a typo is the most
-        // repeated action in an editor and it should not cost two taps and a menu. They
-        // appear only while there is text being edited, so a preview or a read-only file
-        // does not pay for them in bar width.
-        if (showHistory) {
-            BarIcon(
-                Ico.Undo,
-                "Undo",
-                enabled = canUndo,
-                tint = if (canUndo) TextHigh else TextLow.copy(alpha = 0.45f),
-                onClick = onUndo,
-            )
-            BarIcon(
-                Ico.Redo,
-                "Redo",
-                enabled = canRedo,
-                tint = if (canRedo) TextHigh else TextLow.copy(alpha = 0.45f),
-                onClick = onRedo,
             )
         }
 
@@ -951,13 +895,25 @@ private fun BarIcon(
  * switched back to.
  */
 private class PreviewText {
+    private var source: io.github.rosemoe.sora.text.Content? = null
     private var revision = -1
     private var text = ""
 
+    /**
+     * The buffer as a string, re-read only when it is a different buffer or a changed one.
+     *
+     * Both halves of that matter. The revision alone counts edits, and switching between
+     * two files does not edit either of them - so opening a second Markdown file while the
+     * preview was up handed back the first one's text and kept doing so until something
+     * was typed. Identity alone would re-read the whole document on every recomposition.
+     * Together they answer the only question worth asking: is what I am holding still what
+     * I was asked for.
+     */
     fun of(content: io.github.rosemoe.sora.text.Content?, at: Int): String {
-        if (at != revision) {
-            text = content?.toString().orEmpty()
+        if (content !== source || at != revision) {
+            source = content
             revision = at
+            text = content?.toString().orEmpty()
         }
         return text
     }

@@ -108,6 +108,14 @@ private fun AlchemyApp(incoming: State<File?>) {
     // had just crashed again. Once it is in memory the copy on disk has no further job.
     LaunchedEffect(Unit) { CrashGuard.clear(context) }
 
+    // One editor model for the whole app rather than one per screen.
+    //
+    // It was already activity-scoped, so both screens were reaching the same instance
+    // anyway; hoisting it says so, and lets the explorer draw the strip of open files and
+    // ask about unwritten work on the way out. Building it here costs a preferences read
+    // and an empty buffer store.
+    val editor: EditorViewModel = viewModel()
+
     var hasAccess by remember { mutableStateOf(Storage.hasAccess(context)) }
     var booting by remember { mutableStateOf(true) }
     var openPath by rememberSaveable { mutableStateOf(startFile?.absolutePath) }
@@ -196,15 +204,18 @@ private fun AlchemyApp(incoming: State<File?>) {
             Phase.EXPLORER -> {
                 val vm: ExplorerViewModel = viewModel()
                 LaunchedEffect(hasAccess) { if (hasAccess) vm.refresh() }
-                ExplorerScreen(vm = vm, onOpenFile = { openPath = it.absolutePath })
+                ExplorerScreen(
+                    vm = vm,
+                    editor = editor,
+                    onOpenFile = { openPath = it.absolutePath },
+                )
             }
 
             Phase.EDITOR -> {
-                val vm: EditorViewModel = viewModel()
                 val path = editingPath
                 if (path != null) {
                     EditorScreen(
-                        vm = vm,
+                        vm = editor,
                         file = File(path),
                         onClose = { openPath = null },
                         onOpenFile = { openPath = it.absolutePath },

@@ -128,6 +128,13 @@ data class AlchemyAccents(
     val selfRef: Color = Color(0xFFFD971F),    // self, cls, params - orange italic
     val punctuation: Color = Color(0xFFF8F8F2),
     val brace: Color = Color(0xFFF8F8F2),
+    // The braces of an f-string and the $ of a template. Purple because the eye has to be
+    // able to tell a hole from the string around it at a glance; what is inside the hole
+    // is drawn as ordinary code, which is what it is.
+    val interpolation: Color = Color(0xFFAE81FF),
+    // Markdown's fenced blocks and backtick spans. Not the string colour: that one means
+    // a quoted string and nothing else.
+    val codeSpan: Color = Color(0xFFFD971F),
     val folder: Color = Color(0xFFFFB300),
     val folderShade: Color = Color(0xFFE08A00),
     // Inactive line numbers still have to be readable on #000000; the previous value

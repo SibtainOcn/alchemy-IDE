@@ -48,6 +48,18 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
     var lines by mutableStateOf(emptyList<ConsoleLine>())
         private set
 
+    /**
+     * The id of `lines[0]`; every later line is this plus its offset.
+     *
+     * The list is a window, not a log: it is trimmed from the front once it reaches
+     * [MAX_LINES], so a row's position is not a name for it. Keying the transcript on
+     * position instead meant that the first trim renamed every row on screen, and the
+     * whole list was rebuilt on the frame a long run finished. Ids only ever go up, and
+     * they survive a clear.
+     */
+    var firstLineId by mutableStateOf(0L)
+        private set
+
     /** Where the next command will start. Absolute, and never shown in the prompt itself. */
     var directory by mutableStateOf("")
         private set
@@ -147,7 +159,7 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun showLog(log: List<ConsoleLine>) {
         if (log.isEmpty()) return
-        lines = (lines + log).takeLast(MAX_LINES)
+        appendAll(log)
         open = true
     }
 
@@ -201,19 +213,42 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
         job?.cancel()
         job = null
         running = false
+        // Anything typed ahead goes with it. Stopping means stopping, and running the
+        // next line into a runner still busy with the last one is not what was asked for.
+        queued = null
         append(ConsoleLine.Note("stopped waiting. The command may still be running in Termux."))
     }
 
     fun clear() {
+        firstLineId += lines.size
         lines = emptyList()
         if (directory.isNotEmpty()) append(ConsoleLine.Note("in $directory"))
     }
 
+    /**
+     * Typed while something was still running, and run the moment it is not.
+     *
+     * The prompt no longer goes dead while a command is in flight, because a field that is
+     * disabled and re-enabled hands the keyboard back and forth and the screen flickers
+     * for as long as the command takes. Typing ahead is what a terminal is for; one line
+     * is held rather than a list of them, since the second line typed replaces the first
+     * in every shell that offers this.
+     */
+    private var queued: String? = null
+
     /** Whatever was typed at the prompt. */
     fun submit(input: String) {
         val command = input.trim()
-        if (command.isEmpty() || running) return
+        if (command.isEmpty()) return
+        if (running) {
+            queued = command
+            append(ConsoleLine.Note("queued: $command"))
+            return
+        }
+        start(command)
+    }
 
+    private fun start(command: String) {
         if (history.lastOrNull() != command) history += command
         recallAt = -1
         // Written on its own thread: the prompt should not wait on a file to accept a
@@ -223,6 +258,13 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
 
         val cd = Console.cdTarget(command)
         if (cd != null) changeDirectory(cd) else execute(command)
+    }
+
+    /** Runs whatever was typed ahead, once the runner is free again. */
+    private fun runQueued() {
+        val next = queued ?: return
+        queued = null
+        start(next)
     }
 
     /**
@@ -266,6 +308,7 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
             } else {
                 reportFailure(probe, fallback = "cd: $argument: no such directory")
             }
+            runQueued()
         }
     }
 
@@ -277,6 +320,7 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
             val result = provider.run(RunRequest(command = command, workingDir = directory))
             running = false
             report(result, startedAt)
+            runQueued()
         }
     }
 
@@ -290,22 +334,26 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
      * program that printed three lines and then hit a wall wrote three useful lines.
      */
     private fun report(result: com.sibtainocn.alchemy.exec.RunResult, startedAt: Long) {
-        if (result.stdout.isNotEmpty()) append(ConsoleLine.Output(result.stdout.trimEnd('\n')))
-        if (result.stderr.isNotEmpty()) append(ConsoleLine.Error(result.stderr.trimEnd('\n')))
-
-        if (result.stdoutTruncated || result.stderrTruncated) {
-            append(ConsoleLine.Note(truncationNote(result)))
-        }
-
-        if (result.failure != null) {
-            reportFailure(result, fallback = "could not run")
-        } else {
-            append(
-                ConsoleLine.Timing(
-                    Console.summarise(result.exitCode, System.currentTimeMillis() - startedAt)
+        // Collected and added once. Everything a finished run has to say lands on the same
+        // frame, so the list settles at its final height in one step rather than growing
+        // under the reader three times in a row.
+        val batch = buildList {
+            if (result.stdout.isNotEmpty()) add(ConsoleLine.Output(result.stdout.trimEnd('\n')))
+            if (result.stderr.isNotEmpty()) add(ConsoleLine.Error(result.stderr.trimEnd('\n')))
+            if (result.stdoutTruncated || result.stderrTruncated) {
+                add(ConsoleLine.Note(truncationNote(result)))
+            }
+            if (result.failure != null) {
+                add(ConsoleLine.Error(failureMessage(result, fallback = "could not run")))
+            } else {
+                add(
+                    ConsoleLine.Timing(
+                        Console.summarise(result.exitCode, System.currentTimeMillis() - startedAt)
+                    )
                 )
-            )
+            }
         }
+        appendAll(batch)
     }
 
     /** Says how much was lost, rather than letting a cut-off traceback look complete. */
@@ -317,21 +365,37 @@ class TerminalViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun reportFailure(result: com.sibtainocn.alchemy.exec.RunResult, fallback: String) {
-        val message = when (result.failure) {
-            RunFailure.ExternalAppsDisabled ->
-                "The terminal app is refusing commands. Run the setup again from the menu."
-            RunFailure.NotReady -> "The terminal app is not set up yet."
-            RunFailure.TimedOut -> "Timed out."
-            RunFailure.Unsupported -> "This build cannot run code."
-            else -> result.stderr.ifBlank { fallback }
-        }
-        append(ConsoleLine.Error(message))
+        append(ConsoleLine.Error(failureMessage(result, fallback)))
     }
 
-    private fun append(line: ConsoleLine) {
-        // Bounded, because a program that prints in a loop should cost a scrollback rather
-        // than the process.
-        lines = (lines + line).takeLast(MAX_LINES)
+    private fun failureMessage(
+        result: com.sibtainocn.alchemy.exec.RunResult,
+        fallback: String,
+    ): String = when (result.failure) {
+        RunFailure.ExternalAppsDisabled ->
+            "The terminal app is refusing commands. Run the setup again from the menu."
+        RunFailure.NotReady -> "The terminal app is not set up yet."
+        RunFailure.TimedOut -> "Timed out."
+        RunFailure.Unsupported -> "This build cannot run code."
+        else -> result.stderr.ifBlank { fallback }
+    }
+
+    private fun append(line: ConsoleLine) = appendAll(listOf(line))
+
+    /**
+     * Adds to the scrollback in one go, and says how much fell off the front.
+     *
+     * Bounded, because a program that prints in a loop should cost a scrollback rather
+     * than the process. Written as one assignment however many lines arrive: a run that
+     * prints output, a truncation note and a timing is one recomposition rather than
+     * three, which is what stops the view flinching as a command finishes.
+     */
+    private fun appendAll(incoming: List<ConsoleLine>) {
+        if (incoming.isEmpty()) return
+        val combined = lines + incoming
+        val dropped = (combined.size - MAX_LINES).coerceAtLeast(0)
+        if (dropped > 0) firstLineId += dropped
+        lines = if (dropped > 0) combined.subList(dropped, combined.size).toList() else combined
     }
 
     suspend fun readiness(): Readiness = provider.readiness()

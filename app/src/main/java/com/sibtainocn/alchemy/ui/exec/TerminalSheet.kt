@@ -1,16 +1,19 @@
 package com.sibtainocn.alchemy.ui.exec
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,14 +35,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -73,7 +79,7 @@ import com.sibtainocn.alchemy.ui.theme.TextMid
  * changes and then stays out of the way, because forty characters of storage path in front
  * of every line is not a prompt, it is a margin.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TerminalSheet(vm: TerminalViewModel, onOpenFile: (File) -> Unit = {}) {
     if (!vm.open) return
@@ -83,21 +89,54 @@ fun TerminalSheet(vm: TerminalViewModel, onOpenFile: (File) -> Unit = {}) {
     // fold. The prompt is the last line of the transcript now, so it arrives with the
     // output, and a half sheet leaves the file underneath it in view.
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-    var input by remember { mutableStateOf("") }
+    var input by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
-    val accents = LocalAccents.current
+    val focus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboardUp = WindowInsets.isImeVisible
 
-    // Follow the output down, landing on the prompt rather than on the last line of
-    // output: the prompt is the final item, and stopping one short of it hides the thing
-    // the user is about to type into. Anchored to the count rather than to the content so
-    // a long burst scrolls once instead of once per line.
-    LaunchedEffect(vm.lines.size, vm.running) {
+    /**
+     * Closes the keyboard, then the sheet.
+     *
+     * In that order and never together: a sheet dismissed out from under an open keyboard
+     * leaves the keyboard standing over the editor with nothing to type into, and the next
+     * tap goes wherever it lands underneath.
+     */
+    fun dismiss() {
+        focusManager.clearFocus(force = true)
+        vm.close()
+    }
+
+    // Back is one gesture at a time. With the keyboard up it puts the keyboard away and
+    // leaves the transcript on screen, which is what the same press does in every other
+    // app on the device; the press after that closes the sheet.
+    BackHandler(enabled = keyboardUp) { focusManager.clearFocus(force = true) }
+
+    // True while the end of the transcript is already in view. Somebody who has scrolled
+    // up to read a traceback is not asking to be pulled back down by the next line.
+    val following by remember { derivedStateOf { !listState.canScrollForward } }
+
+    // Opening lands on the end of whatever is already there rather than at the top of it.
+    LaunchedEffect(Unit) {
         val last = listState.layoutInfo.totalItemsCount - 1
-        if (last >= 0) runCatching { listState.animateScrollToItem(last) }
+        if (last >= 0) runCatching { listState.scrollToItem(last) }
+    }
+
+    // Follow the output down as it arrives. A jump rather than an animation, and anchored
+    // to the line count rather than to the content: an animated scroll restarted by every
+    // line of a burst spends the whole burst chasing itself, which is what made the sheet
+    // appear to shiver while a command was printing.
+    LaunchedEffect(vm.lines.size) {
+        if (!following) return@LaunchedEffect
+        val last = listState.layoutInfo.totalItemsCount - 1
+        if (last >= 0) runCatching { listState.scrollToItem(last) }
     }
 
     ModalBottomSheet(
-        onDismissRequest = { vm.close() },
+        // Whatever asked for the sheet to go - back, the scrim, a drag - the keyboard goes
+        // first. This is the backstop for the back press as well, since a sheet lives in a
+        // window of its own and cannot be relied on to hand the press to a BackHandler.
+        onDismissRequest = { if (keyboardUp) focusManager.clearFocus(force = true) else vm.close() },
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.background,
         // A handle, because the sheet is resizable now and nothing else says so.
@@ -115,43 +154,55 @@ fun TerminalSheet(vm: TerminalViewModel, onOpenFile: (File) -> Unit = {}) {
                 vm = vm,
                 onRecall = { recalled -> input = recalled },
                 onOpenFile = onOpenFile,
+                onClose = { dismiss() },
             )
             Box(Modifier.fillMaxWidth().height(0.7.dp).background(Hairline))
 
-            val visible = vm.lines.filter { vm.showTimings || it !is ConsoleLine.Timing }
+            // Kept with the indices of the unfiltered list, so a row's key survives a
+            // timing being switched off and the scrollback being trimmed alike.
+            val visible = remember(vm.lines, vm.showTimings) {
+                vm.lines.withIndex().filter { vm.showTimings || it.value !is ConsoleLine.Timing }
+            }
 
             LazyColumn(
                 state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                // Only as tall as it needs to be. With a short transcript the prompt sits
+                // directly under the last line, where a terminal's next line goes; with a
+                // long one this fills what is left and the prompt rests on the keyboard.
+                modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    start = 14.dp, end = 14.dp, top = 10.dp, bottom = 14.dp,
+                    start = 14.dp, end = 14.dp, top = 10.dp,
                 ),
             ) {
                 // Selection is per row rather than around the whole list, because a
-                // selection container cannot hold a text field and the prompt is one of
-                // these rows now. The first thing anyone does with an error they do not
+                // selection container cannot hold a text field and the prompt sits with
+                // these rows. The first thing anyone does with an error they do not
                 // understand is copy it somewhere that might, so the output rows keep it.
-                items(visible.size, key = { "line-" + it }) { index ->
-                    SelectionContainer { ConsoleRow(visible[index], vm.fontSizeSp) }
-                }
-
-                // The live line, in the transcript rather than in a bar beneath it. A
-                // terminal's input is its last line; a field docked over the keyboard read
-                // as a search box that happened to run things.
-                item(key = "prompt") {
-                    Prompt(
-                        value = input,
-                        running = vm.running,
-                        sizeSp = vm.fontSizeSp,
-                        onValue = { input = it },
-                        onSubmit = {
-                            vm.submit(input)
-                            input = ""
-                        },
-                        onStop = { vm.cancel() },
-                    )
+                items(visible.size, key = { vm.firstLineId + visible[it].index }) { index ->
+                    SelectionContainer { ConsoleRow(visible[index].value, vm.fontSizeSp) }
                 }
             }
+
+            // The live line, directly under the transcript rather than inside it.
+            //
+            // It used to be the last item of the list, which meant the list could scroll
+            // it out of existence: an item that leaves the viewport is disposed, and a
+            // disposed text field takes the focus and the keyboard with it, then asked for
+            // both back the moment it returned. That was the flicker. Out here it is
+            // composed for as long as the sheet is open, so output lands behind a keyboard
+            // that never went anywhere.
+            Prompt(
+                value = input,
+                running = vm.running,
+                sizeSp = vm.fontSizeSp,
+                focusRequester = focus,
+                onValue = { input = it },
+                onSubmit = {
+                    vm.submit(input)
+                    input = ""
+                },
+                onStop = { vm.cancel() },
+            )
 
             Spacer(Modifier.navigationBarsPadding())
         }
@@ -163,6 +214,7 @@ private fun Header(
     vm: TerminalViewModel,
     onRecall: (String) -> Unit,
     onOpenFile: (File) -> Unit,
+    onClose: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val copy = rememberCopyToClipboard()
@@ -258,8 +310,9 @@ private fun Header(
                 DropdownMenuItem(
                     onClick = {
                         menuOpen = false
-                        vm.close()
-                        onOpenFile(vm.historyFile())
+                        val history = vm.historyFile()
+                        onClose()
+                        onOpenFile(history)
                     },
                     text = {
                         Text(
@@ -283,7 +336,7 @@ private fun Header(
             }
         }
 
-        SmallAction(Ico.Close, "Close") { vm.close() }
+        SmallAction(Ico.Close, "Close", onClick = onClose)
     }
 }
 
@@ -384,18 +437,21 @@ private fun Prompt(
     value: String,
     running: Boolean,
     sizeSp: Int,
+    focusRequester: FocusRequester,
     onValue: (String) -> Unit,
     onSubmit: () -> Unit,
     onStop: () -> Unit,
 ) {
     val body = sizeSp.sp
-    val focus = remember { FocusRequester() }
 
-    // Typing is the point of the sheet, so the caret starts here.
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    // Typing is the point of the sheet, so the caret starts here - once, when the sheet
+    // opens. Asking again on every recomposition is what turns a keyboard into a strobe.
+    LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
 
     Row(
-        Modifier.fillMaxWidth().padding(top = 6.dp),
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -408,12 +464,17 @@ private fun Prompt(
         BasicTextField(
             value = value,
             onValueChange = onValue,
-            enabled = !running,
+            // Never disabled while a command runs. Taking `enabled` away from a field that
+            // has focus takes the focus with it, which closes the keyboard, and giving it
+            // back a second later opens the keyboard again: the terminal was borrowing the
+            // keyboard for exactly as long as each command took. Typing the next line
+            // while one is still running is what a terminal is for anyway, and the view
+            // model holds that line until the runner is free.
             singleLine = true,
             textStyle = TextStyle(
                 fontFamily = TerminalFont,
                 fontSize = body,
-                color = if (running) TextLow else TextHigh,
+                color = TextHigh,
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(
@@ -424,7 +485,7 @@ private fun Prompt(
                 imeAction = ImeAction.Go,
             ),
             keyboardActions = KeyboardActions(onGo = { onSubmit() }),
-            modifier = Modifier.weight(1f).focusRequester(focus),
+            modifier = Modifier.weight(1f).focusRequester(focusRequester),
             decorationBox = { field ->
                 if (value.isEmpty()) {
                     Text(
