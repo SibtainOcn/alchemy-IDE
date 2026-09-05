@@ -57,6 +57,8 @@ fun EntryActionsDialog(
     onOpenWith: (() -> Unit)? = null,
     /** The system share sheet. Null for folders: Android cannot share a directory. */
     onShare: (() -> Unit)? = null,
+    /** Enters multi-select mode with this entry pre-selected. Null when selection is not available. */
+    onSelect: (() -> Unit)? = null,
     onTogglePin: () -> Unit,
     onCut: () -> Unit,
     onCopy: () -> Unit,
@@ -113,6 +115,10 @@ fun EntryActionsDialog(
                 }
                 if (onShare != null) {
                     DialogAction(Ico.Share, "Share", onClick = onShare)
+                }
+
+                if (onSelect != null) {
+                    DialogAction(Ico.Check, "Select", onClick = onSelect)
                 }
 
                 DialogAction(

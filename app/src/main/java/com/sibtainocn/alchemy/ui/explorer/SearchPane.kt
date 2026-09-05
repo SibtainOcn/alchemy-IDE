@@ -1,8 +1,11 @@
 package com.sibtainocn.alchemy.ui.explorer
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,10 +73,12 @@ private fun Chip(kind: SearchKind, active: Boolean, onClick: () -> Unit) {
         Modifier
             .clip(RoundedCornerShape(50))
             .background(if (active) primary.copy(alpha = 0.16f) else Color.Transparent)
-            .border(
-                width = if (active) 1.dp else 0.7.dp,
-                color = if (active) primary else MaterialTheme.colorScheme.outlineVariant,
-                shape = RoundedCornerShape(50),
+            .then(
+                if (active) Modifier else Modifier.border(
+                    width = 0.7.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    shape = RoundedCornerShape(50),
+                )
             )
             .clickable(onClick = onClick)
             .padding(start = 11.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
@@ -180,12 +185,16 @@ fun SearchResults(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ResultRow(entry: Entry, onClick: () -> Unit, onLongClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
             .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

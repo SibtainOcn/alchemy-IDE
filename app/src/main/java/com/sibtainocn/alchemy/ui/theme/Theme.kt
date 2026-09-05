@@ -29,9 +29,17 @@ val CyanDim = Color(0xFF06323A)
 val CyanSoft = Color(0xFF66F2F4)
 val Amber = Color(0xFFFFB300)     // reserved for folder glyphs in the explorer
 val AmberDim = Color(0xFF3D2B00)
+// Three steps, all of them readable.
+//
+// The old bottom step was #5E5E63, which is about 3.5:1 against a black page - under the
+// 4.5:1 that small text needs to be read rather than squinted at, and the bottom step is
+// where nearly all the secondary text in the app lives: how big a file is, how many things
+// are in a folder, when it was last touched. Those are facts somebody opened a file
+// manager to find out, drawn as though they were decoration. The middle step moves up with
+// it to keep three distinct levels rather than two and a half.
 val TextHigh = Color(0xFFF2F2F3)
-val TextMid = Color(0xFF9A9A9F)
-val TextLow = Color(0xFF5E5E63)
+val TextMid = Color(0xFFB6B6BC)
+val TextLow = Color(0xFF8E8E95)
 val Danger = Color(0xFFFF5449)
 
 private val AlchemyScheme = darkColorScheme(
