@@ -24,8 +24,13 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("sort_desc", true)
         set(v) = sp.edit { putBoolean("sort_desc", v) }
 
+    /**
+     * Off by default. Code is written to a width and read at one; wrapping a long line
+     * into three re-flows the shape the indentation was carrying, and the editor scrolls
+     * sideways perfectly well for the lines that overrun.
+     */
     var wordWrap: Boolean
-        get() = sp.getBoolean("word_wrap", true)
+        get() = sp.getBoolean("word_wrap", false)
         set(v) = sp.edit { putBoolean("word_wrap", v) }
 
     var autoPair: Boolean
@@ -50,7 +55,7 @@ class Prefs(context: Context) {
 
     /** Text size in the terminal sheet, kept apart from the editor's own. */
     var terminalFontSp: Int
-        get() = sp.getInt("terminal_font_sp", 12)
+        get() = sp.getInt("terminal_font_sp", 13)
         set(v) = sp.edit { putInt("terminal_font_sp", v) }
 
     /** Whether each command reports how long it took. */

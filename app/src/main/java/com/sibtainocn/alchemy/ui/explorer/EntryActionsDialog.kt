@@ -53,6 +53,8 @@ fun EntryActionsDialog(
     pinned: Boolean,
     onDismiss: () -> Unit,
     onOpen: () -> Unit,
+    /** Hands the file to another app. Null for folders, which have nowhere to go. */
+    onOpenWith: (() -> Unit)? = null,
     onTogglePin: () -> Unit,
     onCut: () -> Unit,
     onCopy: () -> Unit,
@@ -104,6 +106,9 @@ fun EntryActionsDialog(
                     if (entry.isDir) "Open folder" else "Open in editor",
                     onClick = onOpen,
                 )
+                if (onOpenWith != null) {
+                    DialogAction(Ico.Eye, "Open with another app", onClick = onOpenWith)
+                }
 
                 DialogAction(
                     Ico.Pin,

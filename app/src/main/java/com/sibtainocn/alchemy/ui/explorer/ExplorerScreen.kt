@@ -105,7 +105,11 @@ import com.sibtainocn.alchemy.ui.theme.InkRaised
 import com.sibtainocn.alchemy.ui.theme.Radii
 import com.sibtainocn.alchemy.ui.theme.TextHigh
 import com.sibtainocn.alchemy.ui.theme.TextLow
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import com.sibtainocn.alchemy.data.ExternalOpen
 import com.sibtainocn.alchemy.ui.theme.TextMid
+import kotlinx.coroutines.launch
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -117,6 +121,26 @@ fun ExplorerScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val copyToClipboard = rememberCopyToClipboard()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    /**
+     * Opens a file wherever it belongs.
+     *
+     * Text and source go to the editor. A picture, a video, an archive or an installer
+     * goes to whatever the device already opens it with, which is a better answer than
+     * loading it and reporting that it is not text. The decision is made on the name so
+     * that a tap does not have to wait on a read.
+     */
+    fun openEntry(file: File) {
+        if (!ExternalOpen.isForAnotherApp(file.name)) {
+            onOpenFile(file)
+            return
+        }
+        if (!ExternalOpen.open(context, file)) {
+            scope.launch { snackbar.showSnackbar("No app on this device opens ${file.name}") }
+        }
+    }
 
     var sheetFor by remember { mutableStateOf<Entry?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -275,7 +299,7 @@ fun ExplorerScreen(
                             androidx.compose.foundation.lazy.LazyListState()
                         },
                         onUp = { vm.up() },
-                        onOpen = { e -> if (e.isDir) vm.open(e.file) else onOpenFile(e.file) },
+                        onOpen = { e -> if (e.isDir) vm.open(e.file) else openEntry(e.file) },
                         onHold = { sheetFor = it },
                     )
                 }
@@ -308,8 +332,20 @@ fun ExplorerScreen(
             onDismiss = { sheetFor = null },
             onTogglePin = { vm.togglePin(entry); sheetFor = null },
             onOpen = {
+                // Always the editor: this row is the way to edit a file that a tap sends
+                // elsewhere, an .html being the case it exists for.
                 if (entry.isDir) vm.open(entry.file) else onOpenFile(entry.file)
                 sheetFor = null
+            },
+            onOpenWith = if (entry.isDir) null else {
+                {
+                    sheetFor = null
+                    if (!ExternalOpen.open(context, entry.file)) {
+                        scope.launch {
+                            snackbar.showSnackbar("No app on this device opens ${entry.name}")
+                        }
+                    }
+                }
             },
             onCut = { vm.stage(entry, Transfer.MOVE); sheetFor = null },
             onCopy = { vm.stage(entry, Transfer.COPY); sheetFor = null },

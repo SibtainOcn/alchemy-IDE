@@ -27,6 +27,9 @@ object NoExecutionProvider : ExecutionProvider {
 
     override val setupGuide: SetupGuide? get() = null
 
+    /** Nothing to set up in this build, so nothing to check. */
+    override suspend fun verifyStep(id: String): Boolean? = null
+
     override val requiredPermission: String? get() = null
 
     override fun launchIntent(): Intent? = null

@@ -1,7 +1,9 @@
 package com.sibtainocn.alchemy.ui.editor
 
-import androidx.compose.ui.text.input.TextFieldValue
 import com.sibtainocn.alchemy.data.Language
+import com.sibtainocn.alchemy.ui.editor.sora.EditorOps
+import io.github.rosemoe.sora.widget.CodeEditor
+import io.github.rosemoe.sora.widget.SelectionMovement
 
 /**
  * Everything the key bar decides, kept out of the composable.
@@ -19,8 +21,15 @@ import com.sibtainocn.alchemy.data.Language
 
 /** What a key does when it is pressed. */
 sealed interface KeyOutcome {
-    /** A pure text edit the view model can apply and undo as one step. */
-    data class Edit(val op: (TextFieldValue) -> TextFieldValue) : KeyOutcome
+    /**
+     * Something done to the buffer.
+     *
+     * Given the editor rather than its text, because the editor is what knows where the
+     * caret is, what is selected, and how to make a run of changes one undo step. Handing
+     * a whole document in and taking a whole document back was a cost that grew with the
+     * file; none of these operations needs to see more than the lines it touches.
+     */
+    data class Edit(val op: (CodeEditor) -> Unit) : KeyOutcome
 
     /** Something only the screen can do - save, clipboard, undo history. */
     data class Command(val command: EditorCommand) : KeyOutcome
@@ -160,35 +169,54 @@ object KeyBarModel {
     data class Drop(val index: Int, val residual: Float)
 
     /**
+     * How far past halfway a key must be pulled before it takes the next slot, as a
+     * fraction of that slot.
+     *
+     * At the bare halfway mark the two thresholds meet: crossing forward at half a slot
+     * leaves a remainder one pixel short of the mark to cross straight back, so a finger
+     * held still on the boundary shivers a key between two slots for as long as it rests
+     * there. Asking for a fifth of a slot more in each direction puts [DRAG_SLOP] * 2 of
+     * travel - around 15dp, half a fingertip - between "it moved" and "it moved back".
+     */
+    const val DRAG_SLOP = 0.2f
+
+    /**
      * Resolves a drag into a landing slot.
      *
      * [widths] are the laid-out widths of the keys in their current order, [from] is the
      * slot the dragged key holds now, and [dx] is how far it has been pulled from that
-     * slot. A key takes the next slot once it has covered half of it, and that slot's
-     * width then comes off the drag - so one long pull crosses every key it reaches
+     * slot. A key takes the next slot once it has covered half of it plus [slop], and that
+     * slot's width then comes off the drag - so one long pull crosses every key it reaches
      * instead of stopping after the first.
      *
      * [Drop.residual] is what is left over afterwards, and is what keeps the key under
      * the finger rather than snapping it to the slot it has just taken.
      */
-    fun dropTarget(widths: List<Float>, from: Int, dx: Float, gap: Float): Drop {
+    fun dropTarget(
+        widths: List<Float>,
+        from: Int,
+        dx: Float,
+        gap: Float,
+        slop: Float = 0f,
+    ): Drop {
         if (from !in widths.indices) return Drop(from, dx)
         var index = from
         var left = dx
+        val share = 0.5f + slop
         // One direction only, chosen by the way the finger went. Crossing a slot leaves a
         // remainder of up to half its width pointing the other way, and a slot narrower
         // than that on the far side would otherwise read as a crossing straight back.
         if (dx > 0f) {
             while (true) {
                 val step = (widths.getOrNull(index + 1) ?: break) + gap
-                if (step <= 0f || left <= step / 2f) break
+                if (step <= 0f || left <= step * share) break
                 left -= step
                 index++
             }
         } else {
             while (true) {
                 val step = (widths.getOrNull(index - 1) ?: break) + gap
-                if (step <= 0f || left >= -step / 2f) break
+                if (step <= 0f || left >= -step * share) break
                 left += step
                 index--
             }
@@ -209,18 +237,18 @@ object KeyBarModel {
     ): Pair<KeyOutcome, Modifiers> = when (key.id) {
         CTRL -> KeyOutcome.None to Modifiers(ctrl = !mods.ctrl)
 
-        TAB, "act.indent" -> edit(mods) { SmartEdit.indent(it) }
-        "act.dedent" -> edit(mods) { SmartEdit.dedent(it) }
-        "act.comment" -> edit(mods) { SmartEdit.toggleComment(it, language) }
-        "act.dup", "ctl.dup" -> edit(mods) { SmartEdit.duplicateLine(it) }
-        "act.delline", "ctl.delline" -> edit(mods) { SmartEdit.deleteLine(it) }
+        TAB, "act.indent" -> edit(mods) { EditorOps.indent(it) }
+        "act.dedent" -> edit(mods) { EditorOps.dedent(it) }
+        "act.comment" -> edit(mods) { EditorOps.toggleComment(it, language) }
+        "act.dup", "ctl.dup" -> edit(mods) { it.duplicateLine() }
+        "act.delline", "ctl.delline" -> edit(mods) { EditorOps.deleteLine(it) }
 
-        "act.left" -> edit(mods) { SmartEdit.moveCaret(it, -1, extend = false) }
-        "act.right" -> edit(mods) { SmartEdit.moveCaret(it, 1, extend = false) }
-        "act.up" -> edit(mods) { SmartEdit.moveCaretLine(it, -1, extend = false) }
-        "act.down" -> edit(mods) { SmartEdit.moveCaretLine(it, 1, extend = false) }
-        "act.home" -> edit(mods) { SmartEdit.toLineStart(it, extend = false) }
-        "act.end" -> edit(mods) { SmartEdit.toLineEnd(it, extend = false) }
+        "act.left" -> edit(mods) { it.moveSelection(SelectionMovement.LEFT) }
+        "act.right" -> edit(mods) { it.moveSelection(SelectionMovement.RIGHT) }
+        "act.up" -> edit(mods) { it.moveSelection(SelectionMovement.UP) }
+        "act.down" -> edit(mods) { it.moveSelection(SelectionMovement.DOWN) }
+        "act.home" -> edit(mods) { it.moveSelection(SelectionMovement.LINE_START) }
+        "act.end" -> edit(mods) { it.moveSelection(SelectionMovement.LINE_END) }
 
         "ctl.save" -> command(EditorCommand.SAVE, mods)
         "ctl.undo" -> command(EditorCommand.UNDO, mods)
@@ -228,21 +256,22 @@ object KeyBarModel {
         "ctl.copy" -> command(EditorCommand.COPY, mods)
         "ctl.cut" -> command(EditorCommand.CUT, mods)
         "ctl.paste" -> command(EditorCommand.PASTE, mods)
-        "ctl.all" -> edit(mods) { SmartEdit.selectAll(it) }
+        "ctl.all" -> edit(mods) { it.selectAll() }
 
         else -> insert(key, mods)
     }
 
-    private fun edit(mods: Modifiers, op: (TextFieldValue) -> TextFieldValue) =
+    private fun edit(mods: Modifiers, op: (CodeEditor) -> Unit) =
         KeyOutcome.Edit(op) as KeyOutcome to mods.afterOrdinaryKey()
 
     private fun command(command: EditorCommand, mods: Modifiers) =
         KeyOutcome.Command(command) as KeyOutcome to mods.afterOrdinaryKey()
 
     private fun insert(key: BarKey, mods: Modifiers): Pair<KeyOutcome, Modifiers> {
-        val op: (TextFieldValue) -> TextFieldValue = {
-            SmartEdit.insert(it, key.text, key.caretOffset.coerceAtMost(key.text.length))
-        }
+        // caretOffset is where the caret should land inside the inserted text, which is
+        // what puts it between the brackets of a pair rather than after them.
+        val offset = key.caretOffset.coerceAtMost(key.text.length)
+        val op: (CodeEditor) -> Unit = { it.insertText(key.text, offset) }
         return KeyOutcome.Edit(op) to mods.afterOrdinaryKey()
     }
 }

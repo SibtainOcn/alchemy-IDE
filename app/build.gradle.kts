@@ -141,7 +141,17 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        // CrashGuard stamps the version into the report it writes.
+        buildConfig = true
+    }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
@@ -164,9 +174,12 @@ dependencies {
     implementation(libs.androidx.documentfile)
     implementation(libs.androidx.splashscreen)
 
+    implementation(libs.sora.editor)
+
     debugImplementation(libs.androidx.ui.tooling)
 
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
 }
 
 // ---------------------------------------------------------------------------

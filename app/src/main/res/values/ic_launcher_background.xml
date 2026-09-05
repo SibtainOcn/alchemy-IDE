@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The app's own page colour, not pure black: on a black launcher wallpaper an icon
-         drawn on #000000 has no edge at all and reads as a floating letter. -->
+    <!--
+        The background layer of the adaptive icon. The foreground is transparent, so this
+        is what the launcher's mask is filled with.
+
+        Near black rather than #000000: on a black wallpaper an icon drawn on pure black
+        has no edge, so the mask shape disappears and the mark reads as loose artwork
+        rather than as an icon.
+    -->
     <color name="ic_launcher_background">#0A0A0A</color>
 </resources>

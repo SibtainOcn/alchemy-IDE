@@ -32,8 +32,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # The whole history, so the release notes can be generated against the previous
-          # tag and versionCode can be derived from the commit count.
+          # The whole history and every tag: the release notes are generated against the
+          # previous tag, and versionCode is derived from how many releases there are.
           fetch-depth: 0
 
       - name: Set up JDK
@@ -56,8 +56,27 @@ jobs:
           else
             VERSION="${GITHUB_REF_NAME#v}"
           fi
-          # Monotonic and reproducible: every commit bumps it, no manual bookkeeping.
-          VERSION_CODE=$(git rev-list --count HEAD)
+          # versionCode moves by exactly one per release.
+          #
+          # It used to be the commit count, which jumped by however many commits a release
+          # happened to contain. Counting releases instead would restart the numbering at
+          # 1, and versionCode may never go backwards: v1.1.3 shipped as 54, so a build
+          # numbered 6 would be a downgrade. Play refuses it outright and installed
+          # copies would never be offered the update.
+          #
+          # So the release count is carried forward from where the old scheme stopped:
+          # 54 with five tags in place, making the next release 55, then 56, 57.
+          #
+          # A tag push already has its own tag, so it counts itself; a manual run happens
+          # before the tag exists, so the release about to be made is added on. A released
+          # tag must never be deleted or moved, or a number would be reused.
+          LAST_CODE=54      # versionCode shipped for v1.1.3
+          LAST_TAGS=5       # release tags in place at that point
+          TAGS=$(git tag --list 'v*' | wc -l | tr -d '[:space:]')
+          if ! git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            TAGS=$((TAGS + 1))
+          fi
+          VERSION_CODE=$((LAST_CODE + TAGS - LAST_TAGS))
 
           if printf '%s' "$VERSION" | grep -Eqi -- '-(alpha|beta|rc)'; then
             PRERELEASE=true

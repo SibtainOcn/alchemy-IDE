@@ -4,13 +4,16 @@ import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.sibtainocn.alchemy.data.FileStore
 import com.sibtainocn.alchemy.data.Language
 import com.sibtainocn.alchemy.data.Prefs
+import com.sibtainocn.alchemy.ui.editor.sora.BufferStore
+import com.sibtainocn.alchemy.ui.editor.sora.Caret
+import io.github.rosemoe.sora.text.Content
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -22,9 +25,29 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     var file by mutableStateOf<File?>(null)
         private set
-    var value by mutableStateOf(TextFieldValue(""))
+
+    /**
+     * The buffer on screen.
+     *
+     * The editor is handed this object rather than its text, so it is the same buffer the
+     * store is holding and the same one carrying the undo stack. Null only before the
+     * first file has been read.
+     */
+    var content by mutableStateOf<Content?>(null)
         private set
+
     var loading by mutableStateOf(true)
+        private set
+
+    /**
+     * Fraction of the file decoded so far, 0..1. Only meaningful while [loading], and only
+     * advanced for files at or above [FileStore.PROGRESS_FLOOR_BYTES].
+     */
+    var loadProgress by mutableStateOf(0f)
+        private set
+
+    /** Size of the file being opened, in bytes. Drives the choice of loader. */
+    var loadingBytes by mutableStateOf(0L)
         private set
     var saving by mutableStateOf(false)
         private set
@@ -35,6 +58,22 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     var message by mutableStateOf<String?>(null)
         private set
     var mode by mutableStateOf(ViewMode.EDIT)
+        private set
+    var canUndo by mutableStateOf(false)
+        private set
+    var canRedo by mutableStateOf(false)
+        private set
+    var caret by mutableStateOf(Caret(1, 1, 0))
+        private set
+
+    /**
+     * Bumped on every change to the buffer, whether typed, undone or redone.
+     *
+     * Anything that would otherwise have to copy the whole document to notice a change
+     * watches this instead - the Markdown preview being the one that matters, since
+     * rendering it means reading the buffer out as a string.
+     */
+    var revision by mutableStateOf(0)
         private set
 
     var wordWrap by mutableStateOf(prefs.wordWrap)
@@ -70,86 +109,57 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Undo history for every file opened this session, and the current file's within it.
+     * Every buffer opened this session.
      *
-     * The store lives on the view model, which the activity owns, so switching files
-     * keeps each file's history and leaving the app discards all of them. See [UndoStore]
-     * for why that lifetime is the one worth having.
+     * Session-lived, like the strip that lists them: a record of where you have been while
+     * the app has been open, not a project the app is managing.
      */
-    private val histories = UndoStore()
-    private var history = UndoHistory()
-    private var savedText = ""
+    private val buffers = BufferStore(maxFiles = MAX_TABS, budgetChars = MAX_HELD_CHARS)
 
     /**
      * Every file opened this session, oldest first, as the strip under the bar lists them.
-     *
-     * Session-lived like the undo store and for the same reason: it is a record of where
-     * you have been while the app has been open, not a project the app is managing.
      */
     var tabs by mutableStateOf(emptyList<File>())
         private set
-
-    /**
-     * Unsaved buffers belonging to files that are not on screen.
-     *
-     * Without this, tapping another tab would read the new file from disk and the old
-     * file's edits would simply be gone. Only dirty buffers are parked: a clean file is
-     * re-read instead, which is what picks up a change made to it from outside.
-     */
-    private val drafts = mutableMapOf<String, Draft>()
-
-    private class Draft(val value: TextFieldValue, val savedText: String)
 
     /**
      * Open paths in the order they were last shown, least recent first.
      *
      * Separate from [tabs], which stays in the order files were opened: a strip that
      * reordered itself every time you looked at something would move the tab you were
-     * aiming for out from under your finger. Recency decides what to drop, not where to
-     * draw it.
+     * aiming for out from under your finger.
      */
     private val visits = LinkedHashSet<String>()
 
-    /** Unsaved characters held for files that are not on screen. */
-    private val parkedChars: Int get() = drafts.values.sumOf { it.value.text.length }
-
-    var canUndo by mutableStateOf(false)
-        private set
-    var canRedo by mutableStateOf(false)
-        private set
+    /** The read in flight, held so a newer open can cancel it. */
+    private var loadJob: Job? = null
 
     fun load(target: File) {
         if (file?.absolutePath == target.absolutePath && !loading) return
-        parkDraft()
         file = target
         rememberTab(target)
         loading = true
+        loadProgress = 0f
+        loadingBytes = target.length()
         mode = if (Language.of(target.name) == Language.MARKDOWN) ViewMode.PREVIEW else ViewMode.EDIT
         modifiers = Modifiers()
         loadKeyOrder()
-        // Until the read lands there is no buffer to undo into, and the outgoing file's
-        // history must not answer for the incoming one.
-        history = UndoHistory()
-        syncHistoryFlags()
-        viewModelScope.launch {
-            val binary = FileStore.looksBinary(target)
-            if (binary) {
-                loading = false
+        // Supersede any read still in flight. Without this, backing out of a large file
+        // and opening another leaves the first decode running to completion and racing the
+        // second for `content`.
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            val path = target.absolutePath
+            if (FileStore.looksBinary(target)) {
                 readOnly = true
                 message = "Binary file - cannot be shown as text"
-                value = TextFieldValue("")
+                content = Content("")
+                loading = false
                 return@launch
             }
-            FileStore.read(target)
+            FileStore.read(target) { loadProgress = it }
                 .onSuccess { text ->
-                    // A parked draft wins over what is on disk: it is work this session
-                    // did and has not written yet, and reading over it would lose it.
-                    val draft = drafts.remove(target.absolutePath)
-                    savedText = draft?.savedText ?: text
-                    value = draft?.value ?: TextFieldValue(text)
-                    // Reopening a file this session picks its history back up, unless the
-                    // file has changed since, in which case the store hands back a new one.
-                    history = histories.of(target.absolutePath, value.text)
+                    content = buffers.open(path, text)
                     readOnly = target.length() > FileStore.EDIT_LIMIT_BYTES || !target.canWrite()
                     if (readOnly && target.length() > FileStore.EDIT_LIMIT_BYTES) {
                         message = "Large file - opened read-only"
@@ -158,9 +168,9 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                 .onFailure {
                     readOnly = true
                     message = it.message ?: "Could not read this file"
+                    content = Content("")
                 }
-            syncHistoryFlags()
-            dirty = value.text != savedText
+            refreshFlags()
             // Same reasoning as the explorer: let the loader own at least a frame or two
             // instead of blinking.
             delay(80)
@@ -168,25 +178,53 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Called by the editor whenever the buffer changes, from typing, undo or redo alike.
+     *
+     * One signal recomputes all three answers. [dirty] is the one worth reading twice:
+     * `BufferStore` settles it on length almost every time, and only compares the text
+     * when the buffer has come back to the length of what is on disk - which is exactly
+     * the case that has to be right, because it is undoing back to a saved file.
+     */
+    fun onContentChanged() {
+        revision++
+        refreshFlags()
+    }
+
+    fun onCaret(next: Caret) { caret = next }
+
+    private fun refreshFlags() {
+        val path = file?.absolutePath
+        dirty = path != null && !readOnly && buffers.isDirty(path)
+        canUndo = content?.canUndo() == true
+        canRedo = content?.canRedo() == true
+    }
+
     // ---- Tabs ----
 
     /** True when [target] holds work that is not on disk, whether or not it is on screen. */
-    fun hasUnsavedWork(target: File): Boolean =
-        if (target.absolutePath == file?.absolutePath) dirty && !readOnly
-        else target.absolutePath in drafts
+    fun hasUnsavedWork(target: File): Boolean = buffers.isDirty(target.absolutePath)
+
+    /**
+     * Every open tab holding work that is not on disk.
+     *
+     * [dirty] answers only for the file on screen, so it cannot gate leaving the editor:
+     * a buffer edited and then switched away from is still unwritten, and closing on that
+     * basis discards it without asking.
+     */
+    fun unsavedTabs(): List<File> = tabs.filter { hasUnsavedWork(it) }
 
     /**
      * Closes a tab and says what should be shown instead.
      *
      * Returns the file to move to, or null when that was the last one and the editor has
-     * nothing left to hold. Closing throws away the tab's unsaved draft, which is what
-     * closing something means; the screen asks first.
+     * nothing left to hold. Closing throws away the tab's buffer, which is what closing
+     * something means; the screen asks first.
      */
     fun closeTab(target: File): File? {
         val index = tabs.indexOfFirst { it.absolutePath == target.absolutePath }
         if (index < 0) return file
-        drafts.remove(target.absolutePath)
-        histories.forget(target.absolutePath)
+        buffers.forget(target.absolutePath)
         visits.remove(target.absolutePath)
         val remaining = tabs.filterIndexed { i, _ -> i != index }
         tabs = remaining
@@ -196,109 +234,36 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         return remaining.getOrNull(index - 1) ?: remaining.firstOrNull()
     }
 
-    private fun parkDraft() {
-        val previous = file?.absolutePath ?: return
-        if (dirty && !readOnly) drafts[previous] = Draft(value, savedText)
-        else drafts.remove(previous)
-    }
-
     private fun rememberTab(target: File) {
         val path = target.absolutePath
-        // Re-insert either way: opening a file again is what makes it recent, whether or
+        // Re-inserted either way: opening a file again is what makes it recent, whether or
         // not the strip already lists it.
         visits.remove(path)
         visits.add(path)
         if (tabs.none { it.absolutePath == path }) tabs = tabs + target
-        evictTabs(keep = path)
-    }
-
-    /**
-     * Drops tabs until the strip is a sensible length and what is parked fits the budget.
-     *
-     * Only clean tabs are ever dropped, least recently looked at first. A tab holding
-     * unsaved work is not the app's to throw away, so if every candidate is dirty the
-     * limits are simply exceeded rather than someone's afternoon being deleted to honour
-     * them. Both ceilings are about the same thing from different directions: the count
-     * is what a strip stays usable at on a phone, the character budget is what the heap
-     * can carry, and a file may be up to [FileStore.EDIT_LIMIT_BYTES] of it.
-     */
-    private fun evictTabs(keep: String) {
-        while (tabs.size > MAX_TABS || parkedChars > MAX_PARKED_CHARS) {
-            val victim = visits.firstOrNull { it != keep && it !in drafts && it != file?.absolutePath }
-                ?: return
-            visits.remove(victim)
-            drafts.remove(victim)
-            histories.forget(victim)
-            tabs = tabs.filterNot { it.absolutePath == victim }
-        }
-    }
-
-    fun onValueChange(next: TextFieldValue) {
-        if (readOnly) return
-        val current = value
-        val edited = runCatching { SmartEdit.onValueChange(current, next, language, autoPair) }
-            .getOrDefault(next)
-        if (edited.text != current.text) {
-            history.record(current, edited)
-            syncHistoryFlags()
-        }
-        commit(edited)
-    }
-
-    /**
-     * Applies a toolbar operation, always as its own undo step.
-     *
-     * The operations do index arithmetic against the buffer, so a bad edge case would
-     * otherwise throw straight through composition and take the screen down. A failure
-     * here leaves the text exactly as it was.
-     */
-    fun apply(op: (TextFieldValue) -> TextFieldValue) {
-        if (readOnly) return
-        val current = value
-        val next = runCatching { op(current) }.getOrElse {
-            message = "That did not work here"
-            return
-        }
-        if (next.text != current.text) {
-            history.recordDiscrete(current, next)
-            syncHistoryFlags()
-        }
-        commit(next)
+        // The store drops what it can no longer hold; the strip follows it, so a tab never
+        // survives the buffer behind it.
+        tabs = tabs.filter { buffers.holds(it.absolutePath) || it.absolutePath == path }
+        visits.retainAll(tabs.map { it.absolutePath }.toSet())
     }
 
     fun undo() {
-        val previous = history.undo(value) ?: return
-        commit(previous)
-        syncHistoryFlags()
+        content?.takeIf { it.canUndo() }?.undo()
+        onContentChanged()
     }
 
     fun redo() {
-        val next = history.redo(value) ?: return
-        commit(next)
-        syncHistoryFlags()
-    }
-
-    /**
-     * Puts [next] in the buffer and tells the store what this file now holds, which is
-     * what a later reopen compares against to decide whether its history still applies.
-     */
-    private fun commit(next: TextFieldValue) {
-        value = next
-        dirty = next.text != savedText
-        file?.let { histories.noteText(it.absolutePath, next.text) }
-    }
-
-    private fun syncHistoryFlags() {
-        canUndo = history.canUndo
-        canRedo = history.canRedo
+        content?.takeIf { it.canRedo() }?.redo()
+        onContentChanged()
     }
 
     fun save(onDone: (Boolean) -> Unit = {}) {
         val target = file ?: return
+        val buffer = content ?: return
         if (readOnly || saving) return
         saving = true
         viewModelScope.launch {
-            val text = value.text
+            val text = buffer.toString()
             val result = FileStore.write(target, text)
             // A save that returns instantly reads as "nothing happened"; the loader needs
             // long enough to register as feedback.
@@ -306,8 +271,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             saving = false
             result
                 .onSuccess {
-                    savedText = text
-                    dirty = false
+                    buffers.markSaved(target.absolutePath, text)
+                    refreshFlags()
                     message = "Saved"
                     onDone(true)
                 }
@@ -343,18 +308,17 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
          * A tab is a path and a name, so the strip itself costs nothing worth counting;
          * this is where a row of them stops being something you can aim at on a phone.
          * What actually has to be bounded is the memory behind them, and that is
-         * [MAX_PARKED_CHARS] rather than a count of files.
+         * [MAX_HELD_CHARS].
          */
         const val MAX_TABS = 20
 
         /**
-         * Unsaved characters held for files that are not on screen.
+         * Characters held across every open buffer. Roughly 8 MB of UTF-16.
          *
-         * Roughly 8 MB of UTF-16, which is the real ceiling on the strip: a tab costs
-         * nothing until it holds work that is not on disk, and then it costs the whole
-         * file. Reaching this needs several large files edited and left unsaved at once.
+         * A buffer holding unsaved work is never dropped to honour this, so it is a
+         * ceiling on what can be discarded rather than on what can be kept.
          */
-        const val MAX_PARKED_CHARS = 4_000_000
+        const val MAX_HELD_CHARS = 4_000_000
 
         const val MIN_PREVIEW_ZOOM = 60
         const val MAX_PREVIEW_ZOOM = 250

@@ -8,6 +8,8 @@ composeBom = "2026.08.00"
 graphicsShapes = "1.1.0"
 documentfile = "1.0.1"
 splashscreen = "1.0.1"
+soraEditor = "0.24.6"
+robolectric = "4.16.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -25,7 +27,14 @@ androidx-graphics-shapes = { group = "androidx.graphics", name = "graphics-shape
 androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentfile" }
 androidx-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashscreen" }
 
+# The code surface. A virtualised editor view: see docs/SORA-MIGRATION.md.
+sora-editor = { group = "io.github.rosemoe", name = "editor", version.ref = "soraEditor" }
+
 junit = { group = "junit", name = "junit", version = "4.13.2" }
+
+# Android classes in plain JVM tests. The editor buffer reaches android.text and
+# android.os, so anything written against it needs these to run off a device.
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

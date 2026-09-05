@@ -20,10 +20,18 @@ class CommandHistory(
     private val limit: Int = 500,
 ) {
 
-    /** Oldest first. Empty when nothing has been typed, or the file cannot be read. */
+    /**
+     * Oldest first. Empty when nothing has been typed, or the file cannot be read.
+     *
+     * Blank lines and lines opening with `#` are skipped. The file is offered to the user
+     * in the editor, so it carries a header when it is otherwise empty, and anything they
+     * annotate it with should not come back as a command to recall.
+     */
     fun load(): List<String> = runCatching {
         if (!file.exists()) emptyList()
-        else file.readLines().map { it.trim() }.filter { it.isNotEmpty() }
+        else file.readLines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
     }.getOrDefault(emptyList())
 
     /**
@@ -57,11 +65,20 @@ class CommandHistory(
      * The history is shown by opening it in the editor like any other text file, and an
      * editor cannot open a file that is not there.
      */
+    /**
+     * The file, guaranteed to exist and to have something in it.
+     *
+     * An empty file was indistinguishable from a broken button: the sheet closed, the
+     * editor opened on nothing, and there was no way to tell whether the history was
+     * empty or the file had failed to open. A header says which.
+     */
     fun ensureExists(): File {
         runCatching {
             if (!file.exists()) {
                 file.parentFile?.mkdirs()
-                file.writeText("")
+                file.writeText(EMPTY_NOTE)
+            } else if (file.length() == 0L) {
+                file.writeText(EMPTY_NOTE)
             }
         }
         return file
@@ -71,4 +88,8 @@ class CommandHistory(
 
     /** Where the file is, for showing someone what they are about to delete. */
     val path: String get() = file.absolutePath
+
+    private companion object {
+        val EMPTY_NOTE = "# No commands have been run yet." + System.lineSeparator()
+    }
 }

@@ -2,10 +2,8 @@ package com.sibtainocn.alchemy
 
 import android.Manifest
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.DocumentsContract
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -23,6 +21,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,8 +34,10 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sibtainocn.alchemy.data.IntentFiles
 import com.sibtainocn.alchemy.ui.common.AccessGate
 import com.sibtainocn.alchemy.ui.common.BrandSplash
+import com.sibtainocn.alchemy.ui.common.CrashReportDialog
 import com.sibtainocn.alchemy.ui.common.SPLASH_MS
 import com.sibtainocn.alchemy.ui.common.Motion
 import com.sibtainocn.alchemy.ui.common.Storage
@@ -52,6 +53,15 @@ import java.io.File
 
 class MainActivity : ComponentActivity() {
 
+    /**
+     * File requested by an incoming intent, if any.
+     *
+     * Snapshot state rather than a constructor argument: under `singleTask` a subsequent
+     * VIEW intent is delivered to [onNewIntent] on this instance, so the composition has
+     * to observe it rather than read it once at startup.
+     */
+    private val incoming = mutableStateOf<File?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -62,55 +72,51 @@ class MainActivity : ComponentActivity() {
         var ready = false
         splash.setKeepOnScreenCondition { !ready }
 
-        val startFile = fileFromIntent(intent)
+        val startFile = IntentFiles.resolve(this, intent)
+        incoming.value = startFile
 
         setContent {
             AlchemyTheme {
                 CompositionLocalProvider(LocalAccents provides AlchemyAccents()) {
                     LaunchedEffect(Unit) { ready = true }
-                    AlchemyApp(startFile)
+                    AlchemyApp(incoming)
                 }
             }
         }
     }
 
-    /**
-     * VIEW/EDIT intents from other apps. Direct file paths work as-is; the storage
-     * provider's document URIs are mapped back to a path, which covers the common
-     * "open with" flows. Anything else is declined clearly rather than opened blank.
-     */
-    private fun fileFromIntent(intent: Intent?): File? {
-        val uri = intent?.data ?: return null
-        return when {
-            uri.scheme == "file" -> uri.path?.let(::File)?.takeIf { it.isFile }
-            DocumentsContract.isDocumentUri(this, uri) -> resolveDocumentUri(uri)
-            else -> null
-        }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        IntentFiles.resolve(this, intent)?.let { incoming.value = it }
     }
-
-    private fun resolveDocumentUri(uri: Uri): File? = runCatching {
-        val id = DocumentsContract.getDocumentId(uri)
-        val parts = id.split(":", limit = 2)
-        if (parts.size != 2) return null
-        val (type, relative) = parts
-        if (uri.authority != "com.android.externalstorage.documents") return null
-        val base = if (type.equals("primary", true)) {
-            android.os.Environment.getExternalStorageDirectory()
-        } else {
-            File("/storage/$type")
-        }
-        File(base, relative).takeIf { it.isFile }
-    }.getOrNull()
 }
 
 @Composable
-private fun AlchemyApp(startFile: File?) {
+private fun AlchemyApp(incoming: State<File?>) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val startFile = incoming.value
+
+    // Whatever the last run died of, shown once and then forgotten. Read before anything
+    // else draws, so a crash on the very first frame still gets reported.
+    var crash by remember { mutableStateOf(CrashGuard.lastReport(context)) }
+
+    // Taken off the device as soon as it has been read, rather than when the dialog is
+    // dismissed. A report that waits for a button survives being swiped away, being
+    // backgrounded, and being killed - and then greets the next launch as though the app
+    // had just crashed again. Once it is in memory the copy on disk has no further job.
+    LaunchedEffect(Unit) { CrashGuard.clear(context) }
 
     var hasAccess by remember { mutableStateOf(Storage.hasAccess(context)) }
     var booting by remember { mutableStateOf(true) }
     var openPath by rememberSaveable { mutableStateOf(startFile?.absolutePath) }
+
+    // Subsequent intents arrive through onNewIntent on the same activity, so the file is
+    // observed rather than read once.
+    LaunchedEffect(incoming.value) {
+        incoming.value?.let { openPath = it.absolutePath }
+    }
 
     // What the editor is actually holding.
     //
@@ -139,10 +145,15 @@ private fun AlchemyApp(startFile: File?) {
     ) { granted -> hasAccess = granted }
 
     LaunchedEffect(Unit) {
-        // One pass of the shine, and then the app. The system splash is already gone by
-        // the first frame, so this is the whole of the opening.
+        // One pass of the shine, then the app. The system splash is released on the first
+        // frame, so this is the whole of the opening, and it runs for a launch that carries
+        // a file as well as for a plain one.
         delay(SPLASH_MS.toLong())
         booting = false
+    }
+
+    crash?.let { report ->
+        CrashReportDialog(report) { crash = null }
     }
 
     AnimatedContent(

@@ -102,7 +102,18 @@ class CommandHistoryTest {
         // file that is not there.
         val file = history().ensureExists()
         assertTrue(file.exists())
+        // Not blank: an editor opening on nothing is indistinguishable from one that
+        // failed to open. The note is a comment, so it is not recalled as a command.
+        assertTrue(file.readText().isNotBlank())
         assertTrue(history().load().isEmpty())
+    }
+
+    @Test
+    fun `comments in the file are not offered as commands`() {
+        val h = history()
+        h.ensureExists()
+        h.add("ls -la")
+        assertEquals(listOf("ls -la"), h.load())
     }
 
     @Test

@@ -1,0 +1,20 @@
+Alchemy IDE
+Copyright (C) 2026 SibtainOcn
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. See LICENSE for the full text.
+
+Third-party components
+----------------------
+
+sora-editor
+  https://github.com/Rosemoe/sora-editor
+  Copyright (C) 2020-2024 Rosemoe
+  GNU Lesser General Public License, version 2.1
+
+  Section 3 of the LGPL-2.1 permits a recipient to apply the terms of the GNU
+  General Public License version 2 or later to a copy of the library, in which
+  case the GPL applies to that copy in place of the LGPL. Alchemy IDE conveys
+  sora-editor under GPL-3.0-or-later on that basis.

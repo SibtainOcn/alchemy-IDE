@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!--
+        The app browses all of shared storage, so a file handed to another app can come
+        from anywhere on it. root-path covers removable volumes under /storage as well as
+        the primary one.
+
+        Breadth here is not extra access: the provider only ever mints a URI for a file the
+        user has just chosen, the grant is read-only, and it lasts as long as the receiving
+        activity does.
+    -->
+    <root-path name="device" path="/" />
+</paths>

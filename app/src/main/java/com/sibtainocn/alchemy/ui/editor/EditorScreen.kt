@@ -42,6 +42,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -55,6 +57,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -65,6 +68,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sibtainocn.alchemy.data.ExternalOpen
 import com.sibtainocn.alchemy.data.Language
 import com.sibtainocn.alchemy.ui.common.ConfirmDialog
 import com.sibtainocn.alchemy.ui.common.EmptyState
@@ -84,9 +88,13 @@ import com.sibtainocn.alchemy.ui.exec.TerminalSheet
 import com.sibtainocn.alchemy.ui.exec.TerminalViewModel
 import com.sibtainocn.alchemy.ui.preview.MarkdownView
 import com.sibtainocn.alchemy.ui.theme.CodeFont
+import com.sibtainocn.alchemy.ui.theme.Hairline
 import com.sibtainocn.alchemy.ui.theme.InkHigh
 import com.sibtainocn.alchemy.ui.theme.InkRaised
 import com.sibtainocn.alchemy.ui.theme.LocalAccents
+import com.sibtainocn.alchemy.ui.editor.sora.EditorPalette
+import com.sibtainocn.alchemy.ui.editor.sora.SoraCodeField
+import io.github.rosemoe.sora.widget.CodeEditor
 import com.sibtainocn.alchemy.ui.theme.Radii
 import com.sibtainocn.alchemy.ui.theme.TextHigh
 import com.sibtainocn.alchemy.ui.theme.TextLow
@@ -112,6 +120,7 @@ fun EditorScreen(
     onOpenFile: (File) -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
+    val context = LocalContext.current
     val copyToClipboard = rememberCopyToClipboard()
     val pasteFromClipboard = rememberPasteFromClipboard()
 
@@ -122,6 +131,15 @@ fun EditorScreen(
     var closingTab by remember { mutableStateOf<File?>(null) }
     var setupOpen by remember { mutableStateOf(false) }
     var runtimesOpen by remember { mutableStateOf(false) }
+
+    // The view itself, for the commands the key bar and the bar produce. The buffer lives
+    // on the view model; this is only the thing that knows where the caret is in it.
+    var editor by remember { mutableStateOf<CodeEditor?>(null) }
+
+    // Rendering Markdown means reading the buffer out as one string, which is the one
+    // thing here that costs what the file is long. Held against the revision it was taken
+    // at, so switching to the preview without having typed copies nothing.
+    val preview = remember { PreviewText() }
 
     // Shared with the rest of the app rather than owned by this screen: an install is a
     // long download that must not be abandoned because a dialog closed.
@@ -164,7 +182,9 @@ fun EditorScreen(
     }
 
     fun leave() {
-        if (vm.dirty) confirmExit = true else onClose()
+        // Every tab, not just the one on screen: switching tabs does not write the
+        // one being left, so vm.dirty alone lets unwritten buffers go silently.
+        if (vm.unsavedTabs().isNotEmpty()) confirmExit = true else onClose()
     }
 
     /** Drops a tab and goes wherever the view model says is left. */
@@ -180,21 +200,20 @@ fun EditorScreen(
     // this screen can reach - the clipboard, the save pipeline, the undo history.
     fun handleKey(outcome: KeyOutcome) {
         when (outcome) {
-            is KeyOutcome.Edit -> vm.apply(outcome.op)
-            is KeyOutcome.Command -> when (outcome.command) {
-                EditorCommand.SAVE -> vm.save()
-                EditorCommand.UNDO -> vm.undo()
-                EditorCommand.REDO -> vm.redo()
-                EditorCommand.COPY -> copyToClipboard(SmartEdit.selectedTextOrLine(vm.value))
-                EditorCommand.CUT -> {
-                    copyToClipboard(SmartEdit.selectedTextOrLine(vm.value))
-                    vm.apply { v ->
-                        if (v.selection.collapsed) SmartEdit.deleteLine(v)
-                        else SmartEdit.deleteSelection(v)
-                    }
-                }
-                EditorCommand.PASTE -> pasteFromClipboard { text ->
-                    vm.apply { SmartEdit.insert(it, text) }
+            is KeyOutcome.Edit -> editor?.let(outcome.op)
+            is KeyOutcome.Command -> {
+                val target = editor
+                when (outcome.command) {
+                    EditorCommand.SAVE -> vm.save()
+                    // Through the view rather than the buffer, so the caret follows the
+                    // change back to where it was made.
+                    EditorCommand.UNDO -> target?.undo() ?: vm.undo()
+                    EditorCommand.REDO -> target?.redo() ?: vm.redo()
+                    // The editor's own clipboard: with nothing selected it takes the
+                    // whole line, which is what these keys have always done.
+                    EditorCommand.COPY -> target?.copyText(true)
+                    EditorCommand.CUT -> target?.cutText()
+                    EditorCommand.PASTE -> target?.pasteText()
                 }
             }
             KeyOutcome.None -> Unit
@@ -224,7 +243,7 @@ fun EditorScreen(
                 subtitle = buildString {
                     append(vm.language.label)
                     append("  ·  ")
-                    append(vm.value.text.count { it == '\n' } + 1)
+                    append(vm.content?.lineCount ?: 1)
                     append(" lines")
                     if (vm.readOnly) append("  ·  read-only")
                 },
@@ -266,7 +285,7 @@ fun EditorScreen(
                         vm = vm,
                         onDismiss = { menuOpen = false },
                         onCopyAll = {
-                            copyToClipboard(vm.value.text)
+                            copyToClipboard(vm.content?.toString().orEmpty())
                             menuOpen = false
                         },
                         onInfo = { infoOpen = true; menuOpen = false },
@@ -305,29 +324,52 @@ fun EditorScreen(
             }
 
             AnimatedContent(
-                targetState = Triple(vm.loading, vm.mode, vm.readOnly && vm.value.text.isEmpty()),
+                targetState = Triple(vm.loading, vm.mode, vm.readOnly && (vm.content?.length ?: 0) == 0),
                 transitionSpec = { fadeIn(Motion.standard()) togetherWith fadeOut(Motion.snappy()) },
                 label = "editor-body",
                 modifier = Modifier.weight(1f),
             ) { (loading, mode, blocked) ->
                 when {
-                    loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { ShapeLoader(size = 30.dp) }
+                    loading -> LoadingFile(
+                        name = vm.file?.name.orEmpty(),
+                        sizeBytes = vm.loadingBytes,
+                        progress = vm.loadProgress,
+                    )
                     blocked -> EmptyState(
                         "Cannot open this file",
                         vm.message ?: "It is not text, or it is not readable.",
                         Ico.Info,
+                        actionLabel = "Open with another app",
+                        onAction = {
+                            if (!ExternalOpen.open(context, file)) {
+                                scope.launch {
+                                    snackbar.showSnackbar("No app on this device opens ${file.name}")
+                                }
+                            }
+                        },
                     )
-                    mode == ViewMode.PREVIEW ->
-                        MarkdownView(vm.value.text, Modifier.fillMaxSize(), vm.previewZoomPct / 100f)
-                    else -> CodeField(
-                        value = vm.value,
-                        onValueChange = vm::onValueChange,
-                        language = vm.language,
-                        fontSizeSp = vm.fontSizeSp,
-                        wordWrap = vm.wordWrap,
-                        showLineNumbers = vm.lineNumbers,
-                        readOnly = vm.readOnly,
+                    mode == ViewMode.PREVIEW -> MarkdownView(
+                        preview.of(vm.content, vm.revision),
+                        Modifier.fillMaxSize(),
+                        vm.previewZoomPct / 100f,
                     )
+                    else -> vm.content?.let { buffer ->
+                        SoraCodeField(
+                            content = buffer,
+                            language = vm.language,
+                            palette = EditorPalette(),
+                            fontSizeSp = vm.fontSizeSp,
+                            wordWrap = vm.wordWrap,
+                            autoPair = vm.autoPair,
+                            lineNumbers = vm.lineNumbers,
+                            readOnly = vm.readOnly,
+                            onChanged = vm::onContentChanged,
+                            onCaret = vm::onCaret,
+                            onFontSize = vm::setFontSize,
+                            onReady = { editor = it },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 }
             }
 
@@ -356,9 +398,13 @@ fun EditorScreen(
     }
 
     if (confirmExit) {
+        val unsaved = vm.unsavedTabs()
         ConfirmDialog(
             title = "Discard changes?",
-            body = "${file.name} has unsaved edits.",
+            body = when (unsaved.size) {
+                0, 1 -> "${unsaved.firstOrNull()?.name ?: file.name} has unsaved edits."
+                else -> unsaved.joinToString(", ") { it.name } + " have unsaved edits."
+            },
             confirmLabel = "Discard",
             danger = true,
             onDismiss = { confirmExit = false },
@@ -407,8 +453,8 @@ fun EditorScreen(
         FileInfoSheet(
             file = file,
             language = vm.language.label,
-            lines = vm.value.text.count { it == '\n' } + 1,
-            characters = vm.value.text.length,
+            lines = vm.content?.lineCount ?: 1,
+            characters = vm.content?.length ?: 0,
             onCopyPath = { copyToClipboard(file.absolutePath) },
             onDismiss = { infoOpen = false },
         )
@@ -509,11 +555,11 @@ private fun Tab(
 @Composable
 private fun CaretStatus(vm: EditorViewModel) {
     val accents = LocalAccents.current
-    val text = vm.value.text
-    val caret = vm.value.selection.start
-    val line = remember(text, caret) { SmartEdit.lineNumberAt(text, caret) }
-    val col = remember(text, caret) { SmartEdit.columnAt(text, caret) }
-    val selected = vm.value.selection.length
+    // Reported by the editor as the caret moves, rather than worked out from the buffer.
+    val caret = vm.caret
+    val line = caret.line
+    val col = caret.column
+    val selected = caret.selected
 
     Row(
         Modifier
@@ -714,9 +760,9 @@ private fun EditorMenu(
         MenuRow(Ico.Redo, "Redo", enabled = vm.canRedo) { vm.redo() }
         HairlineDivider(Modifier.padding(vertical = 4.dp))
 
-        MenuRow(Ico.Wrap, "Word wrap", trailing = onOff(vm.wordWrap)) { vm.toggleWrap() }
-        MenuRow(Ico.Numbers, "Line numbers", trailing = onOff(vm.lineNumbers)) { vm.toggleLineNumbers() }
-        MenuRow(Ico.Code, "Auto-pair", trailing = onOff(vm.autoPair)) { vm.toggleAutoPair() }
+        MenuToggleRow(Ico.Wrap, "Word wrap", vm.wordWrap) { vm.toggleWrap() }
+        MenuToggleRow(Ico.Numbers, "Line numbers", vm.lineNumbers) { vm.toggleLineNumbers() }
+        MenuToggleRow(Ico.Code, "Auto-pair", vm.autoPair) { vm.toggleAutoPair() }
 
         HairlineDivider(Modifier.padding(vertical = 4.dp))
         // Reading a rendered page and editing its source are sized by different questions,
@@ -779,7 +825,45 @@ private fun StepperRow(
     }
 }
 
-private fun onOff(on: Boolean) = if (on) "On" else "Off"
+/**
+ * A menu row for something that is either on or off.
+ *
+ * The state used to be the words "On" and "Off" in the trailing slot, which reads as a
+ * label rather than as a control: it says what the setting is without saying that tapping
+ * would change it. A switch says both.
+ */
+@Composable
+private fun MenuToggleRow(
+    icon: ImageVector,
+    label: String,
+    on: Boolean,
+    onToggle: () -> Unit,
+) {
+    DropdownMenuItem(
+        onClick = onToggle,
+        leadingIcon = { Icon(icon, null, Modifier.size(18.dp), tint = TextMid) },
+        text = {
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = TextHigh)
+        },
+        trailingIcon = {
+            Switch(
+                checked = on,
+                // The whole row is the target, not just the switch. A control that is only
+                // half of what you can press is a control people miss the other half of.
+                onCheckedChange = null,
+                // Material's switch is sized for a settings screen; a menu row is tighter.
+                modifier = Modifier.scale(0.7f),
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                    uncheckedThumbColor = TextLow,
+                    uncheckedTrackColor = Color.Transparent,
+                    uncheckedBorderColor = Hairline,
+                ),
+            )
+        },
+    )
+}
 
 @Composable
 private fun MenuRow(
@@ -856,5 +940,25 @@ private fun BarIcon(
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, label, Modifier.size(19.dp), tint = tint)
+    }
+}
+
+/**
+ * The last string the preview was rendered from, and the revision it came out of.
+ *
+ * Reading a [Content] out as a string copies the whole document, so it is done when the
+ * buffer has actually moved and not when the screen merely recomposed or the preview was
+ * switched back to.
+ */
+private class PreviewText {
+    private var revision = -1
+    private var text = ""
+
+    fun of(content: io.github.rosemoe.sora.text.Content?, at: Int): String {
+        if (at != revision) {
+            text = content?.toString().orEmpty()
+            revision = at
+        }
+        return text
     }
 }

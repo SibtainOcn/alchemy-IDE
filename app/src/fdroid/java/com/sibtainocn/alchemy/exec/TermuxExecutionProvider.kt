@@ -3,6 +3,7 @@ package com.sibtainocn.alchemy.exec
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import com.sibtainocn.alchemy.data.FileStore
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
@@ -117,6 +118,35 @@ class TermuxExecutionProvider(private val context: Context) : ExecutionProvider 
     }
 
     override val setupGuide: SetupGuide get() = Termux.SETUP_GUIDE
+
+    /**
+     * Each setup row, checked on its own.
+     *
+     * Ordered from cheapest to most expensive so the screen fills in from the top: the
+     * first two are package and permission lookups that answer immediately, and only the
+     * last two cost a round trip into Termux.
+     */
+    override suspend fun verifyStep(id: String): Boolean? = when (id) {
+        Termux.STEP_INSTALL -> readiness().let {
+            it !is Readiness.RunnerMissing &&
+                it !is Readiness.RunnerFromAppStore &&
+                it !is Readiness.RunnerTooOld
+        }
+
+        Termux.STEP_PERMISSION -> readiness() !is Readiness.PermissionMissing
+
+        // The handshake is the only way to see this one: Termux answers a refusal with a
+        // notification of its own and never calls back, so silence is the signal.
+        Termux.STEP_EXTERNAL -> verify() is Readiness.Ready
+
+        // termux-setup-storage creates ~/storage. Its presence is the cheap proof, and a
+        // reachability probe of the shared root is the one that matters, because the
+        // directory can exist while the permission behind it has been revoked.
+        Termux.STEP_STORAGE ->
+            canReach(Termux.STORAGE_DIR) && canReach(FileStore.storageRoot.absolutePath)
+
+        else -> null
+    }
 
     override val requiredPermission: String get() = Termux.PERMISSION_RUN_COMMAND
 
