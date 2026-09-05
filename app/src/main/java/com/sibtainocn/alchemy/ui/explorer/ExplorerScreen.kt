@@ -49,6 +49,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.DropdownMenu
@@ -73,6 +74,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -157,6 +159,22 @@ fun ExplorerScreen(
         }
     }
 
+    /**
+     * Hands files to the system share sheet, and says so when nothing can take them.
+     *
+     * Folders are dropped on the way through, so a mixed selection shares the files in it
+     * rather than refusing outright.
+     */
+    fun shareFiles(files: List<File>) {
+        if (ExternalOpen.share(context, files)) return
+        scope.launch {
+            snackbar.showSnackbar(
+                if (files.size == 1) "Nothing on this device can share that"
+                else "Nothing on this device can share these"
+            )
+        }
+    }
+
     var sheetFor by remember { mutableStateOf<Entry?>(null) }
     var creating by remember { mutableStateOf(false) }
     var newFile by remember { mutableStateOf(false) }
@@ -169,6 +187,9 @@ fun ExplorerScreen(
     var runtimesOpen by remember { mutableStateOf(false) }
     var closingTab by remember { mutableStateOf<File?>(null) }
     var leaving by remember { mutableStateOf(false) }
+    var selectionActions by remember { mutableStateOf(false) }
+    var deletingSelection by remember { mutableStateOf(false) }
+    var movingSelection by remember { mutableStateOf(false) }
 
     // Setting the terminal up has nothing to do with any one file, so it is reachable
     // from here rather than only from inside the editor.
@@ -235,8 +256,11 @@ fun ExplorerScreen(
         )
     }
 
+    // Selection is a mode, and back leaves a mode before it leaves anything else.
+    BackHandler(enabled = state.selecting) { vm.setSelecting(false) }
+
     // Swallowing back at the root would trap the user in the app.
-    BackHandler(enabled = !state.atRoot || state.searching) { vm.up() }
+    BackHandler(enabled = !state.selecting && (!state.atRoot || state.searching)) { vm.up() }
 
     // At the root, back leaves the app, and unwritten work leaves with it: the buffers
     // live in memory for as long as the process does and no longer. So this is the last
@@ -244,7 +268,10 @@ fun ExplorerScreen(
     // left to be discovered next time the file is opened. The two handlers never overlap:
     // one is for going up, this one is for going out.
     val unsavedOnLeaving = editor.unsavedTabs()
-    BackHandler(enabled = state.atRoot && !state.searching && unsavedOnLeaving.isNotEmpty()) {
+    BackHandler(
+        enabled = !state.selecting && state.atRoot && !state.searching &&
+            unsavedOnLeaving.isNotEmpty()
+    ) {
         leaving = true
     }
 
@@ -267,11 +294,19 @@ fun ExplorerScreen(
             // corner is where a thumb already is, and a second control down there would
             // only ever be the right one half the time.
             val armed = state.staged != null
-            val busy = state.working != null
+            val busy = state.job != null
+            val picking = state.selecting && state.selected.isNotEmpty()
             FloatingActionButton(
                 onClick = {
-                    if (busy) return@FloatingActionButton
-                    if (armed) vm.paste() else creating = true
+                    when {
+                        // A hidden transfer is still a transfer, and the turning button is
+                        // the only thing on screen that says so. Tapping it brings the
+                        // dialog back rather than doing nothing.
+                        busy -> vm.showProgress()
+                        picking -> selectionActions = true
+                        armed -> vm.paste()
+                        else -> creating = true
+                    }
                 },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -279,7 +314,12 @@ fun ExplorerScreen(
                 modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
             ) {
                 AnimatedContent(
-                    targetState = if (busy) 2 else if (armed) 1 else 0,
+                    targetState = when {
+                        busy -> 2
+                        picking -> 3
+                        armed -> 1
+                        else -> 0
+                    },
                     transitionSpec = {
                         (scaleIn(Motion.expressive(), initialScale = 0.7f) + fadeIn(Motion.standard()))
                             .togetherWith(
@@ -289,6 +329,7 @@ fun ExplorerScreen(
                     label = "fab",
                 ) { mode ->
                     when (mode) {
+                        3 -> Icon(Ico.Check, "What to do with the selection")
                         2 -> ShapeLoader(size = 20.dp, color = MaterialTheme.colorScheme.onPrimary)
                         1 -> Icon(Ico.Paste, "Paste here")
                         else -> Icon(Ico.Plus, "New")
@@ -299,19 +340,42 @@ fun ExplorerScreen(
     ) { pad ->
         Column(Modifier.fillMaxSize().padding(pad)) {
 
-            ExplorerBar(
-                state = state,
-                onUp = { vm.up() },
-                onSearchToggle = { vm.setSearching(it) },
-                onQuery = vm::setQuery,
-                onSort = { sortSheet = true },
-                onHome = { vm.jumpTo(FileStore.storageRoot) },
-                onCopyPath = { copyToClipboard(state.dir.absolutePath) },
-                onSetup = if (setup.supported) ({ setupOpen = true }) else null,
-                onRuntimes = if (setup.supported) ({ runtimesOpen = true }) else null,
-            )
+            // Two bars, one at a time. Selection is a mode with its own question - how
+            // many, and of what - and answering it in the corner of the browsing bar
+            // would leave neither legible.
+            if (state.selecting) {
+                SelectionBar(
+                    state = state,
+                    onExit = { vm.setSelecting(false) },
+                    onToggleAll = { vm.toggleSelectAll() },
+                )
+            } else {
+                ExplorerBar(
+                    state = state,
+                    // The walk is reported at the top edge of the window, which is where
+                    // a browser puts it and where it can be seen without looking away
+                    // from the results filling in underneath.
+                    busy = state.searchRunning,
+                    onUp = { vm.up() },
+                    onSearchToggle = { vm.setSearching(it) },
+                    onQuery = vm::setQuery,
+                    onSort = { sortSheet = true },
+                    onHome = { vm.jumpTo(FileStore.storageRoot) },
+                    onCopyPath = { copyToClipboard(state.dir.absolutePath) },
+                    onMultiSelect = { vm.setSelecting(true) },
+                    onSetup = if (setup.supported) ({ setupOpen = true }) else null,
+                    onRuntimes = if (setup.supported) ({ runtimesOpen = true }) else null,
+                )
+            }
 
-            Crumbs(dir = state.dir, onJump = vm::jumpTo)
+            // While searching, the chips take the breadcrumbs' place: the path is not
+            // where the results are coming from any more, and the kinds are what the
+            // screen is now for.
+            if (state.searching) {
+                SearchChips(selected = state.searchKind, onPick = vm::setSearchKind)
+            } else {
+                Crumbs(dir = state.dir, onJump = vm::jumpTo)
+            }
 
             // What this session has open, in the place somebody browsing for the next file
             // is already looking. The editor draws the same strip under its own bar; out
@@ -335,21 +399,39 @@ fun ExplorerScreen(
             // The clipboard strip, in the one place it cannot be missed and cannot be
             // mistaken for part of the folder.
             AnimatedVisibility(
-                visible = state.staged != null,
+                visible = state.staged != null && state.job == null,
                 enter = expandVertically(Motion.standard()) + fadeIn(Motion.standard()),
                 exit = shrinkVertically(Motion.snappy()) + fadeOut(Motion.snappy()),
             ) {
                 state.staged?.let { staged ->
-                    ClipboardBar(
-                        staged = staged,
-                        working = state.working,
-                        progress = state.progress,
-                        onCancel = { vm.clearStaged() },
-                    )
+                    ClipboardBar(staged = staged, onCancel = { vm.clearStaged() })
                 }
             }
 
             HairlineDivider()
+
+            if (state.searching) {
+                SearchResults(
+                    root = state.dir,
+                    query = state.query,
+                    kind = state.searchKind,
+                    results = state.results,
+                    running = state.searchRunning,
+                    truncated = state.searchTruncated,
+                    onOpen = { entry ->
+                        // A folder result is a place to go, so going there ends the
+                        // search: the answer to "where is it" is standing in it.
+                        if (entry.isDir) {
+                            vm.setSearching(false)
+                            vm.open(entry.file)
+                        } else {
+                            openEntry(entry.file)
+                        }
+                    },
+                    onHold = { sheetFor = it },
+                )
+                return@Column
+            }
 
             // Directory changes slide: descending pushes in from the right, going up
             // pulls back from the left. It keeps the hierarchy legible without a map.
@@ -374,14 +456,31 @@ fun ExplorerScreen(
                     else -> EntryList(
                         entries = state.visible,
                         pinned = state.pinned,
-                        showUpRow = !state.atRoot && state.query.isBlank(),
+                        selecting = state.selecting,
+                        selected = state.selected,
+                        showUpRow = !state.atRoot && state.query.isBlank() && !state.selecting,
                         parentName = state.dir.parentFile?.name.orEmpty(),
                         listState = scrollStates.getOrPut(state.dir.absolutePath) {
                             androidx.compose.foundation.lazy.LazyListState()
                         },
                         onUp = { vm.up() },
-                        onOpen = { e -> if (e.isDir) vm.open(e.file) else openEntry(e.file) },
-                        onHold = { sheetFor = it },
+                        onOpen = { e ->
+                            // In selection mode a tap ticks the row. Nothing opens while
+                            // things are being picked, which is the one rule that keeps a
+                            // mis-tap from navigating away from a selection.
+                            when {
+                                state.selecting -> vm.toggleSelected(e)
+                                e.isDir -> vm.open(e.file)
+                                else -> openEntry(e.file)
+                            }
+                        },
+                        // A long press is what starts a selection everywhere else on the
+                        // platform, and once one is running it is the way back to what can
+                        // be done with it.
+                        onHold = { e ->
+                            if (state.selecting) selectionActions = true else sheetFor = e
+                        },
+                        onHoldSelect = { e -> vm.toggleSelected(e) },
                     )
                 }
             }
@@ -427,6 +526,9 @@ fun ExplorerScreen(
                         }
                     }
                 }
+            },
+            onShare = if (entry.isDir) null else {
+                { sheetFor = null; shareFiles(listOf(entry.file)) }
             },
             onCut = { vm.stage(entry, Transfer.MOVE); sheetFor = null },
             onCopy = { vm.stage(entry, Transfer.COPY); sheetFor = null },
@@ -531,6 +633,61 @@ fun ExplorerScreen(
         )
     }
 
+    if (selectionActions && state.selection.isNotEmpty()) {
+        SelectionSheet(
+            selection = state.selection,
+            bytes = state.selectedBytes,
+            onDismiss = { selectionActions = false },
+            onShare = {
+                selectionActions = false
+                shareFiles(state.selection.filterNot { it.isDir }.map { it.file })
+            },
+            onCopy = { selectionActions = false; vm.stage(state.selection, Transfer.COPY) },
+            onCut = { selectionActions = false; vm.stage(state.selection, Transfer.MOVE) },
+            onMove = { selectionActions = false; movingSelection = true },
+            onDelete = { selectionActions = false; deletingSelection = true },
+        )
+    }
+
+    if (deletingSelection) {
+        val picked = state.selection
+        ConfirmDialog(
+            title = if (picked.size == 1) "Delete ${picked.first().name}?" else "Delete ${picked.size} items?",
+            body = "This cannot be undone." +
+                if (picked.any { it.isDir }) " Folders go with everything inside them." else "",
+            confirmLabel = "Delete",
+            danger = true,
+            onDismiss = { deletingSelection = false },
+        ) {
+            deletingSelection = false
+            vm.deleteAll(picked)
+        }
+    }
+
+    if (movingSelection) {
+        val picked = state.selection
+        FolderPickerSheet(
+            start = state.dir,
+            title = if (picked.size == 1) "Move " + picked.first().name else "Move ${picked.size} items",
+            confirmLabel = "Move here",
+            // A folder cannot be moved into itself, and with several picked the first one
+            // that is a folder is the one the picker can actually bar the way to.
+            blocked = picked.firstOrNull { it.isDir }?.file,
+            onDismiss = { movingSelection = false },
+            onPick = { destination ->
+                movingSelection = false
+                vm.moveTo(picked, destination)
+            },
+        )
+    }
+
+    // In front of the folder rather than in a strip above it, and it outlives the screen
+    // it was started from: the work is on the view model, so turning the phone or walking
+    // into another folder does not interrupt it.
+    state.job?.let { job ->
+        TransferDialog(job, onCancel = { vm.cancelTransfer() }, onHide = { vm.hideProgress() })
+    }
+
     // Raised from inside a running transfer, which stays parked until it is answered.
     state.ask?.let { ConflictDialog(it) }
 }
@@ -543,12 +700,7 @@ fun ExplorerScreen(
  * abandons it without touching anything on disk.
  */
 @Composable
-private fun ClipboardBar(
-    staged: Staged,
-    working: String?,
-    progress: Float?,
-    onCancel: () -> Unit,
-) {
+private fun ClipboardBar(staged: Staged, onCancel: () -> Unit) {
     val onContainer = MaterialTheme.colorScheme.onPrimaryContainer
     val moving = staged.transfer == Transfer.MOVE
 
@@ -561,59 +713,83 @@ private fun ClipboardBar(
             Spacer(Modifier.width(13.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    working ?: if (moving) "Ready to move" else "Ready to copy",
+                    if (moving) "Ready to move" else "Ready to copy",
                     style = MaterialTheme.typography.labelMedium,
                     color = onContainer,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    staged.entry.name,
+                    staged.label,
                     style = MaterialTheme.typography.bodySmall,
                     color = onContainer.copy(alpha = 0.72f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (working == null) {
-                BarButton(Ico.Close, "Cancel", tint = onContainer, onClick = onCancel)
-            } else {
-                Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
-                    ShapeLoader(size = 18.dp, color = onContainer)
-                }
-            }
+            BarButton(Ico.Close, "Cancel", tint = onContainer, onClick = onCancel)
         }
+    }
+}
 
-        // A determinate line while the size is known, and nothing at all when it is not:
-        // a bar that cannot say how far along it is should not pretend to.
-        if (working != null && progress != null) {
-            val width by animateFloatAsState(progress, Motion.standard(), label = "transfer")
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(2.dp)
-                    .background(onContainer.copy(alpha = 0.2f))
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth(width.coerceIn(0f, 1f))
-                        .height(2.dp)
-                        .background(onContainer)
+/**
+ * The bar while rows are being picked.
+ *
+ * It replaces the browsing bar rather than growing out of it, because the questions are
+ * different: one is where am I, the other is how many of these have I got. The count leads,
+ * the size under it is what the selection actually weighs, and the tick takes all or none.
+ */
+@Composable
+private fun SelectionBar(
+    state: ExplorerState,
+    onExit: () -> Unit,
+    onToggleAll: () -> Unit,
+) {
+    Column(
+        Modifier
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BarButton(Ico.Close, "Leave selection", onClick = onExit)
+            Column(Modifier.weight(1f).padding(start = 6.dp)) {
+                Text(
+                    "${state.selected.size} / ${state.visible.size}",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextHigh,
+                )
+                Text(
+                    Fmt.size(state.selectedBytes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextLow,
                 )
             }
+            BarButton(
+                Ico.Check,
+                if (state.allSelected) "Select none" else "Select all",
+                tint = if (state.allSelected) MaterialTheme.colorScheme.primary else TextMid,
+                onClick = onToggleAll,
+            )
         }
+        HairlineDivider()
     }
 }
 
 @Composable
 private fun ExplorerBar(
     state: ExplorerState,
+    /** True while a search is walking the tree. */
+    busy: Boolean,
     onUp: () -> Unit,
     onSearchToggle: (Boolean) -> Unit,
     onQuery: (String) -> Unit,
     onSort: () -> Unit,
     onHome: () -> Unit,
     onCopyPath: () -> Unit,
+    onMultiSelect: () -> Unit,
     /** Both null in a build that cannot run code. */
     onSetup: (() -> Unit)?,
     onRuntimes: (() -> Unit)?,
@@ -621,6 +797,21 @@ private fun ExplorerBar(
     var menuOpen by remember { mutableStateOf(false) }
 
     Column(Modifier.windowInsetsPadding(WindowInsets.statusBars)) {
+        // Indeterminate on purpose. A recursive walk has no idea how many directories are
+        // left, and a bar that guesses at that is a bar that lies. The height is held
+        // either way so the bar does not shift down when a search starts.
+        if (busy) {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().height(2.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = Hairline,
+                strokeCap = StrokeCap.Butt,
+                gapSize = 0.dp,
+            )
+        } else {
+            Spacer(Modifier.height(2.dp))
+        }
+
         Row(
             Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -640,7 +831,14 @@ private fun ExplorerBar(
                         value = state.query,
                         onValueChange = onQuery,
                         singleLine = true,
-                        placeholder = { Text("Filter in this folder", color = TextLow) },
+                        placeholder = {
+                            // It walks the whole tree now, so it no longer claims to be a
+                            // filter over what is on screen.
+                            Text(
+                                "Search in " + state.dir.name.ifBlank { "storage" },
+                                color = TextLow,
+                            )
+                        },
                         modifier = Modifier.fillMaxWidth().focusRequester(focus),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = {}),
@@ -671,7 +869,12 @@ private fun ExplorerBar(
             }
 
             if (state.searching) {
-                BarButton(Ico.Close, "Close search") { onSearchToggle(false) }
+                // Clears what was typed while there is something to clear, and leaves the
+                // search when there is not - which is the same X doing the one thing that
+                // is left to undo.
+                BarButton(Ico.Close, if (state.query.isEmpty()) "Close search" else "Clear") {
+                    if (state.query.isEmpty()) onSearchToggle(false) else onQuery("")
+                }
             } else {
                 BarButton(Ico.Search, "Search") { onSearchToggle(true) }
                 BarButton(Ico.Sort, "Sort", onClick = onSort)
@@ -686,6 +889,9 @@ private fun ExplorerBar(
                         shape = RoundedCornerShape(Radii.md),
                         modifier = Modifier.width(240.dp),
                     ) {
+                        // First, because it is the only thing in here that changes what
+                        // the screen is for rather than acting on it once.
+                        BarMenuRow(Ico.Check, "Multi-select") { menuOpen = false; onMultiSelect() }
                         BarMenuRow(Ico.Copy, "Copy path") { menuOpen = false; onCopyPath() }
                         onSetup?.let {
                             BarMenuRow(Ico.Wrench, "Set up terminal") { menuOpen = false; it() }
@@ -761,12 +967,16 @@ private fun Crumbs(dir: File, onJump: (File) -> Unit) {
 private fun EntryList(
     entries: List<Entry>,
     pinned: Set<String>,
+    selecting: Boolean,
+    selected: Set<String>,
     showUpRow: Boolean,
     parentName: String,
     listState: androidx.compose.foundation.lazy.LazyListState,
     onUp: () -> Unit,
     onOpen: (Entry) -> Unit,
     onHold: (Entry) -> Unit,
+    /** A long press outside selection mode, which is how one is started. */
+    onHoldSelect: (Entry) -> Unit,
 ) {
     LazyColumn(
         state = listState,
@@ -780,8 +990,14 @@ private fun EntryList(
             EntryRow(
                 entry = entry,
                 pinned = entry.file.absolutePath in pinned,
+                selecting = selecting,
+                selected = entry.file.absolutePath in selected,
                 onClick = { onOpen(entry) },
-                onLongClick = { onHold(entry) },
+                onLongClick = {
+                    // Press and hold means the same thing it means everywhere else on the
+                    // platform: start picking, with this row picked.
+                    if (selecting) onHold(entry) else onHoldSelect(entry)
+                },
                 modifier = Modifier.animateItem(
                     fadeInSpec = Motion.standard(),
                     placementSpec = Motion.offset(),
@@ -829,6 +1045,8 @@ private fun UpRow(parentName: String, onUp: () -> Unit) {
 private fun EntryRow(
     entry: Entry,
     pinned: Boolean,
+    selecting: Boolean,
+    selected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -837,10 +1055,14 @@ private fun EntryRow(
     val pressed by interaction.collectIsPressedAsState()
     // A small settle on press: enough to feel physical, not enough to read as a bounce.
     val scale by animateFloatAsState(if (pressed) 0.976f else 1f, Motion.snappy(), label = "press")
+    // A wash rather than a border. A picked row has to be obvious at a glance down a long
+    // list, and an outline on every second row turns the list into a grid.
+    val wash = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
 
     Row(
         modifier
             .fillMaxWidth()
+            .background(if (selected) wash else Color.Transparent)
             .scale(scale)
             .combinedClickable(
                 interactionSource = interaction,
@@ -851,8 +1073,35 @@ private fun EntryRow(
             .padding(horizontal = 16.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.alpha(if (entry.isHidden) 0.55f else 1f)) {
+        Box(
+            Modifier.alpha(if (entry.isHidden) 0.55f else 1f),
+            contentAlignment = Alignment.Center,
+        ) {
             EntryGlyph(entry)
+            // Over the glyph rather than beside it: a tick in its own column would move
+            // every row sideways the moment selection started, which reads as the list
+            // being rebuilt under the finger.
+            if (selecting) {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.86f),
+                            CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (selected) {
+                        Icon(
+                            Ico.Check,
+                            null,
+                            Modifier.size(19.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
+                }
+            }
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {

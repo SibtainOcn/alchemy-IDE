@@ -97,6 +97,68 @@ object ExternalOpen {
     }
 
     /**
+     * Hands [files] to the system share sheet.
+     *
+     * The platform's own chooser, not a list of our own: what can receive a file is a
+     * property of the device and changes with every app installed on it, and every one of
+     * them already knows how to be shared to.
+     *
+     * One file goes as `ACTION_SEND`, several as `ACTION_SEND_MULTIPLE`, which is the
+     * difference between "share this" and "share these" as far as every receiving app is
+     * concerned. The type offered is the one type they have in common, narrowed as far as
+     * it honestly can be: the exact type for a single picture, the image family for
+     * several of different kinds, and the wildcard for a mixture. A chooser given a type
+     * too narrow to be true hides apps that would have worked.
+     *
+     * Folders are dropped rather than refused: Android has no concept of sharing a
+     * directory, and there is no reason for the caller to have to know that.
+     */
+    fun share(context: Context, files: List<File>): Boolean {
+        val authority = context.packageName + AUTHORITY_SUFFIX
+        val uris = ArrayList<android.net.Uri>()
+        val types = mutableSetOf<String>()
+        for (file in files) {
+            if (file.isDirectory || !file.exists()) continue
+            val uri = runCatching { FileProvider.getUriForFile(context, authority, file) }
+                .getOrNull() ?: continue
+            uris += uri
+            types += mimeOf(file.name)
+        }
+        if (uris.isEmpty()) return false
+
+        val intent = if (uris.size == 1) {
+            Intent(Intent.ACTION_SEND)
+                .putExtra(Intent.EXTRA_STREAM, uris.first())
+                .setType(types.single())
+        } else {
+            Intent(Intent.ACTION_SEND_MULTIPLE)
+                .putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                .setType(commonType(types))
+        }
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+        return try {
+            context.startActivity(
+                Intent.createChooser(intent, null)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    // The chooser holds the grant on the receiver's behalf; without this
+                    // the app the user picks is handed a URI it cannot read.
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            )
+            true
+        } catch (_: ActivityNotFoundException) {
+            false
+        }
+    }
+
+    /** The narrowest type that is true of all of them. */
+    private fun commonType(types: Set<String>): String {
+        types.singleOrNull()?.let { return it }
+        val families = types.map { it.substringBefore('/') }.toSet()
+        return families.singleOrNull()?.let { "$it/*" } ?: "*/*"
+    }
+
+    /**
      * True when the file is something Alchemy has no business opening as text.
      *
      * Decided on the name, so the explorer can route a tap without reading the file first.
