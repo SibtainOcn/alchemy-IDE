@@ -104,7 +104,7 @@ fun SponsorScreen(onBack: () -> Unit) {
         SupportCard(
             icon = Icons.Filled.Favorite,
             title = "GitHub Sponsors",
-            subtitle = "Monthly or one off, cancel whenever. Handled entirely by GitHub.",
+            subtitle = "Handled entirely by GitHub.",
             enabled = SPONSORS_URL.isNotBlank(),
             onClick = { openLink(context, SPONSORS_URL) }
         )
@@ -221,7 +221,7 @@ private fun HeroCard() {
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                "Alchemy is built in evenings and weekends, and it is given away because a code editor that charges for editing is a worse editor. Platforms change constantly, and keeping up with them is the work.",
+                "Alchemy is a passion project built in evenings and weekends, offered for free to empower all developers. Yet, keeping up with constantly changing platforms takes continuous effort.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
             )
