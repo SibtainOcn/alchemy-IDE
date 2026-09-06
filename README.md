@@ -33,6 +33,7 @@
 - [x] Markdown preview (rendered tables, task lists, and syntax-highlighted code blocks)  
 - [x] Run code with Termux (execute Python, C, and Go directly on device)  
 - [x] Integrated terminal console (real-time output, command history, and execution timings)  
+  > **Note:** The terminal currently does not support interactive input as the project is still in development. If you need interactive support, please use the Termux app directly.
 - [x] File inspector (view path, size, lines, characters, and quick path copy)  
 - [x] Pin files & folders to top  
 - [x] Conflict resolution dialog (skip, replace, keep both)  

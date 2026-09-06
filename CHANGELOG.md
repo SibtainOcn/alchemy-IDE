@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [1.2.0] - 2026-09-05
 
+> **Note:** The integrated terminal currently lacks interactive input support as the project is still in development. If you need interactive support, please use the Termux app directly.
+
 ### Added
 - **Files can be picked in bulk.** Multi-select in the 3-dot folder menu turns the list
   into something to choose from: a tap ticks a row, the bar counts what is ticked against
