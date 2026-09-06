@@ -9,7 +9,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/SibtainOcn/alchemy-IDE/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/SibtainOcn/alchemy-IDE/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/SibtainOcn/alchemy-IDE?style=flat-square&label=release&color=cyan)](https://github.com/SibtainOcn/alchemy-IDE/releases/latest)
 [![Changelog](https://img.shields.io/badge/Changelog-black?style=flat-square)](https://github.com/SibtainOcn/alchemy-IDE/blob/main/CHANGELOG.md)
-[![Downloads](https://img.shields.io/github/downloads/SibtainOcn/alchemy-IDE/total?style=flat-square&cacheSeconds=3600)](https://github.com/SibtainOcn/alchemy-IDE/releases)
+[![Downloads](https://img.shields.io/github/downloads/SibtainOcn/alchemy-IDE/total?style=flat-square&color=blueviolet)](https://github.com/SibtainOcn/alchemy-IDE/releases)
 [![Stars](https://img.shields.io/github/stars/SibtainOcn/alchemy-IDE?style=flat-square&cacheSeconds=3600)](https://github.com/SibtainOcn/alchemy-IDE/stargazers)
 
 </div>
