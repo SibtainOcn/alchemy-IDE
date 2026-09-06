@@ -52,6 +52,20 @@ Contributions are welcome!
 
 ---
 
+## 🔍 Verify application signature
+
+The app should contain the signature below. The github workflow action uses it, and the releases are based on it to make it a reproducible build. If the signature is different, your third party distributor has modified the application. Please use the app with the original signature
+
+```
+Certificate fingerprints:
+
+SHA1: 17:A0:AE:DC:BA:5D:82:BD:62:E6:B0:59:5C:8F:64:ED:6D:97:77:01
+SHA256: E8:66:A6:1E:27:ED:2B:D5:B4:9A:10:4B:D8:B3:72:7C:59:14:3A:3C:00:A2:6C:32:46:2F:8A:88:46:59:DB:96
+
+```
+
+---
+
 ## 📄 Licence
 
 [GNU GPL v3.0 or later](https://github.com/SibtainOcn/alchemy-IDE/blob/main/LICENSE) &nbsp;·&nbsp; `SPDX-License-Identifier: GPL-3.0-or-later`
