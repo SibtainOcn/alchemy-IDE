@@ -16,6 +16,16 @@
 
 ---
 
+## 📸 Screenshots
+
+<div align="center">
+  <img src="assets/2.jpg" alt="Alchemy IDE Code Editor and Programmer Key Bar" width="32%" />
+  <img src="assets/3.jpg" alt="Alchemy IDE Integrated Terminal and Code Execution" width="32%" />
+  <img src="assets/1.jpg" alt="Alchemy IDE Markdown Live Preview" width="32%" />
+</div>
+
+---
+
 ## Features
 
 - [x] Built-in file explorer (browse, search, sort, create, rename, delete, cut, copy & move)  

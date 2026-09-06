@@ -269,6 +269,84 @@
             line-height: 1.15;
         }
 
+        /* Screenshots Section */
+        .screenshots-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            width: 100%;
+            margin-bottom: 72px;
+        }
+
+        @media (max-width: 1100px) {
+            .screenshots-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .screenshots-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .screenshot-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: var(--shadow-sm);
+            transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+        }
+
+        .screenshot-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-hover);
+            border-color: var(--border-strong);
+        }
+
+        .screenshot-img-wrapper {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            background: #000000;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid var(--border-subtle);
+            margin-bottom: 20px;
+        }
+
+        .screenshot-img {
+            width: 100%;
+            max-width: 440px;
+            height: auto;
+            display: block;
+            object-fit: contain;
+        }
+
+        .screenshot-info {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .screenshot-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+        }
+
+        .screenshot-desc {
+            font-size: 1.05rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
         /* Full Width Dynamic Grid */
         .feature-grid {
             display: grid;
@@ -513,6 +591,60 @@
                 <div class="spec-item">
                     <div class="spec-dot"></div>
                     <span>Pure True Black Theme</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Screenshots Section -->
+        <div class="section-header">
+            <span class="section-tag">Interface Preview</span>
+            <h2 class="section-title">Built for Speed &amp; Clarity on Mobile</h2>
+        </div>
+
+        <section class="screenshots-grid">
+            <div class="screenshot-card">
+                <div class="screenshot-img-wrapper">
+                    <img src="assets/2.jpg"
+                        alt="Alchemy IDE Code Editor with Syntax Highlighting and Programmer Key Bar"
+                        class="screenshot-img">
+                </div>
+                <div class="screenshot-info">
+                    <div class="card-tag" style="align-self: flex-start;">CODE EDITOR</div>
+                    <h3 class="screenshot-title">Native Editor &amp; Programmer Key Bar</h3>
+                    <p class="screenshot-desc">
+                        Multi-file tab navigation, line numbering, auto-pairing brackets, and a customizable keyboard
+                        accessory bar with navigation and code symbol keys.
+                    </p>
+                </div>
+            </div>
+
+            <div class="screenshot-card">
+                <div class="screenshot-img-wrapper">
+                    <img src="assets/3.jpg" alt="Alchemy IDE Integrated Terminal and Offline, On-Device Code Execution"
+                        class="screenshot-img">
+                </div>
+                <div class="screenshot-info">
+                    <div class="card-tag" style="align-self: flex-start;">TERMINAL &amp; RUNTIME</div>
+                    <h3 class="screenshot-title">Terminal &amp; Termux Execution</h3>
+                    <p class="screenshot-desc">
+                        Execute Python, C, and Go directly on device with split editor terminal, live output streaming,
+                        command history, and exact execution timings.
+                    </p>
+                </div>
+            </div>
+
+            <div class="screenshot-card">
+                <div class="screenshot-img-wrapper">
+                    <img src="assets/1.jpg" alt="Alchemy IDE Live Markdown Preview with Code Blocks"
+                        class="screenshot-img">
+                </div>
+                <div class="screenshot-info">
+                    <div class="card-tag" style="align-self: flex-start;">MARKDOWN PREVIEW</div>
+                    <h3 class="screenshot-title">Live Markdown Rendering</h3>
+                    <p class="screenshot-desc">
+                        Instant live rendering of Markdown files with syntax-highlighted code blocks, formatted headers,
+                        task lists, and full AMOLED dark theme aesthetics.
+                    </p>
                 </div>
             </div>
         </section>
