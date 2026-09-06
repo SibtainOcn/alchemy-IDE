@@ -134,6 +134,7 @@ fun ExplorerScreen(
      */
     editor: EditorViewModel,
     onOpenFile: (File) -> Unit,
+    onSponsor: () -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -367,6 +368,7 @@ fun ExplorerScreen(
                     onMultiSelect = { vm.setSelecting(true) },
                     onSetup = if (setup.supported) ({ setupOpen = true }) else null,
                     onRuntimes = if (setup.supported) ({ runtimesOpen = true }) else null,
+                    onSponsor = onSponsor,
                 )
             }
 
@@ -801,6 +803,7 @@ private fun ExplorerBar(
     /** Both null in a build that cannot run code. */
     onSetup: (() -> Unit)?,
     onRuntimes: (() -> Unit)?,
+    onSponsor: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
 
@@ -907,6 +910,7 @@ private fun ExplorerBar(
                         onRuntimes?.let {
                             BarMenuRow(Ico.Terminal, "Install languages") { menuOpen = false; it() }
                         }
+                        BarMenuRow(Ico.Info, "Support Alchemy") { menuOpen = false; onSponsor() }
                     }
                 }
             }

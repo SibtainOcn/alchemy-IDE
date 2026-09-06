@@ -5,6 +5,11 @@ the name Hazel IDE.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-09-06
+
+### Added
+- **Support Alchemy screen.** Added a new "Support Alchemy" screen accessible from the 3-dot dropdown menus in both the Explorer and Editor screens.
+
 ## [1.2.0] - 2026-09-05
 
 > **Note:** The integrated terminal currently lacks interactive input support as the project is still in development. If you need interactive support, please use the Termux app directly.

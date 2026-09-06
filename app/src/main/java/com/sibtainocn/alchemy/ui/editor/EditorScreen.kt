@@ -113,6 +113,7 @@ fun EditorScreen(
     onClose: () -> Unit,
     /** Switches the editor to another file, for the terminal's own history. */
     onOpenFile: (File) -> Unit = {},
+    onSponsor: () -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -288,6 +289,10 @@ fun EditorScreen(
                             { runtimesOpen = true; menuOpen = false }
                         } else {
                             null
+                        },
+                        onSponsor = {
+                            onSponsor()
+                            menuOpen = false
                         },
                     )
                 },
@@ -710,6 +715,7 @@ private fun EditorMenu(
     /** Both null in a build that cannot run code, which is how the rows stay out of it. */
     onSetup: (() -> Unit)?,
     onRuntimes: (() -> Unit)?,
+    onSponsor: () -> Unit,
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -754,6 +760,7 @@ private fun EditorMenu(
         MenuRow(Ico.Info, "File info", onClick = onInfo)
         onSetup?.let { MenuRow(Ico.Wrench, "Set up terminal", onClick = it) }
         onRuntimes?.let { MenuRow(Ico.Terminal, "Install languages", onClick = it) }
+        MenuRow(Ico.Info, "Support Alchemy", onClick = onSponsor)
     }
 }
 
