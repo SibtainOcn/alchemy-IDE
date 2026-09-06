@@ -45,6 +45,7 @@ import com.sibtainocn.alchemy.ui.editor.EditorScreen
 import com.sibtainocn.alchemy.ui.editor.EditorViewModel
 import com.sibtainocn.alchemy.ui.explorer.ExplorerScreen
 import com.sibtainocn.alchemy.ui.explorer.ExplorerViewModel
+import com.sibtainocn.alchemy.ui.about.SponsorScreen
 import com.sibtainocn.alchemy.ui.theme.AlchemyAccents
 import com.sibtainocn.alchemy.ui.theme.AlchemyTheme
 import com.sibtainocn.alchemy.ui.theme.LocalAccents
@@ -118,6 +119,7 @@ private fun AlchemyApp(incoming: State<File?>) {
 
     var hasAccess by remember { mutableStateOf(Storage.hasAccess(context)) }
     var booting by remember { mutableStateOf(true) }
+    var sponsorOpen by rememberSaveable { mutableStateOf(false) }
     var openPath by rememberSaveable { mutableStateOf(startFile?.absolutePath) }
 
     // Subsequent intents arrive through onNewIntent on the same activity, so the file is
@@ -168,6 +170,7 @@ private fun AlchemyApp(incoming: State<File?>) {
         targetState = when {
             booting -> Phase.SPLASH
             !hasAccess -> Phase.GATE
+            sponsorOpen -> Phase.SPONSOR
             openPath != null -> Phase.EDITOR
             else -> Phase.EXPLORER
         },
@@ -177,7 +180,7 @@ private fun AlchemyApp(incoming: State<File?>) {
                     (fadeIn(Motion.standard()) + scaleIn(Motion.expressive(), initialScale = 1.04f))
                         .togetherWith(fadeOut(Motion.standard()) + scaleOut(Motion.standard(), targetScale = 0.97f))
 
-                targetState == Phase.EDITOR ->
+                targetState == Phase.EDITOR || targetState == Phase.SPONSOR ->
                     (slideInHorizontally(Motion.offset()) { it / 6 } + fadeIn(Motion.standard()))
                         .togetherWith(fadeOut(Motion.snappy()))
 
@@ -208,6 +211,7 @@ private fun AlchemyApp(incoming: State<File?>) {
                     vm = vm,
                     editor = editor,
                     onOpenFile = { openPath = it.absolutePath },
+                    onSponsor = { sponsorOpen = true },
                 )
             }
 
@@ -219,11 +223,15 @@ private fun AlchemyApp(incoming: State<File?>) {
                         file = File(path),
                         onClose = { openPath = null },
                         onOpenFile = { openPath = it.absolutePath },
+                        onSponsor = { sponsorOpen = true },
                     )
                 }
+            }
+            Phase.SPONSOR -> {
+                SponsorScreen(onBack = { sponsorOpen = false })
             }
         }
     }
 }
 
-private enum class Phase { SPLASH, GATE, EXPLORER, EDITOR }
+private enum class Phase { SPLASH, GATE, EXPLORER, EDITOR, SPONSOR }
