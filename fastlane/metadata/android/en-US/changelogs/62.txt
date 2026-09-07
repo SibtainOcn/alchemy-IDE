@@ -1,1 +1,2 @@
-* Added a new Support Alchemy screen accessible from the 3-dot dropdown menus in both the Explorer and Editor screens.
+* Prepared project for F-Droid submission and reproducible builds.
+* Added per-architecture package version codes for optimal device installation.

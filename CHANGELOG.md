@@ -5,6 +5,15 @@ the name Hazel IDE.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-09-07
+
+### Added
+- **F-Droid metadata & reproducible build recipe.** Added Fastlane store metadata and F-Droid build configuration.
+- **Dedicated ABI version codes.** Implemented per-architecture version code offsets (armeabi-v7a, x86, x86_64, arm64-v8a) so devices automatically pick optimal 64-bit packages.
+
+### Changed
+- **Toolchain compliance.** Removed Foojay convention plugin to satisfy F-Droid build requirements.
+
 ## [1.2.1] - 2026-09-06
 
 ### Added

@@ -1,3 +1,4 @@
+import com.android.build.api.variant.FilterConfiguration
 import java.io.File
 import java.io.FileInputStream
 import java.security.MessageDigest
@@ -13,11 +14,30 @@ plugins {
 // ---------------------------------------------------------------------------
 // Version
 //
-// One source of truth, overridable from the command line so CI can build straight from a
-// tag: ./gradlew assembleRelease -PversionName=1.2.1 -PversionCode=59
+// Both the name and the code are written as literals in defaultConfig below,
+// because F-Droid reads them out of this file with a regular expression.
 // ---------------------------------------------------------------------------
-val appVersionName: String = (findProperty("versionName") as String?) ?: "1.2.1"
-val appVersionCode: Int = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 59
+val abiVersionCodes = mapOf(
+    "armeabi-v7a" to 1,
+    "x86" to 2,
+    "x86_64" to 3,
+    "arm64-v8a" to 4
+)
+
+val appVersionName: String by lazy {
+    (project.findProperty("versionName") as String?)
+        ?.trim()
+        ?.removePrefix("v")
+        ?.takeIf { it.isNotBlank() }
+        ?: android.defaultConfig.versionName
+        ?: "1.2.2"
+}
+
+val appBaseVersionCode: Int by lazy {
+    (project.findProperty("versionCode") as String?)?.toIntOrNull()
+        ?: android.defaultConfig.versionCode
+        ?: 60
+}
 
 /**
  * STABLE, BETA or DEBUG - the middle word of every APK filename.
@@ -75,8 +95,8 @@ android {
         applicationId = "com.sibtainocn.alchemy"
         minSdk = 24
         targetSdk = 37
-        versionCode = appVersionCode
-        versionName = appVersionName
+        versionCode = 60
+        versionName = "1.2.2"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -155,6 +175,19 @@ android {
 
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val abi = output.filters
+                .firstOrNull { it.filterType == FilterConfiguration.FilterType.ABI }
+                ?.identifier
+                ?: "universal"
+
+            output.versionCode.set(appBaseVersionCode + (abiVersionCodes[abi] ?: 0))
+        }
     }
 }
 
