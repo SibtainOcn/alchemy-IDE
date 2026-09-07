@@ -176,6 +176,13 @@ android {
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     }
+
+    // Disable Google Play dependency metadata block in the APK signing block to comply
+    // with F-Droid security scanner requirements for reproducible builds.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
 }
 
 androidComponents {
