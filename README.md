@@ -2,7 +2,7 @@
 
 <img src="assets/ALCHEMY-BANNER.png" alt="Alchemy IDE Banner" width="100%" />
 
-### A native code editor and file manager for writing and managing code on Android.
+### A native code editor and file manager for Android — simple enough for students learning to code, capable enough for everyday development.
 
 ![API](https://img.shields.io/badge/API-24%2B-brightgreen?style=flat-square)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)](https://github.com/SibtainOcn/alchemy-IDE/blob/main/LICENSE)
