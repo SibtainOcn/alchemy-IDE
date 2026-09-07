@@ -1,0 +1,1 @@
+A native code editor and file manager for Android.

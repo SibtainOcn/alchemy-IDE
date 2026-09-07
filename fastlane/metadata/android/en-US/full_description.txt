@@ -1,0 +1,37 @@
+Alchemy IDE is a code editor and file manager for writing and managing code on Android. It runs natively, needs no server, and works entirely on the device.
+
+Editing
+
+* Syntax highlighting for Python, Kotlin, Java, JavaScript, TypeScript, C, C++, Rust, Go, Markdown and more
+* Multi-file tabs that retain open files and unsaved drafts across tab switches
+* Programmer key bar with Ctrl, Tab, arrows, Home, End and code symbols, customisable per language
+* Smart typing with bracket and quote pairing, auto indent and block expansion
+* Line editing tools: duplicate, delete and block comment toggle
+* Text magnifier, selection handles and pinch-to-zoom
+* Undo and redo
+* Auto word-wrap and line numbers toggle
+
+File management
+
+* Built-in file explorer with search, sort, create, rename, delete, cut, copy and move
+* In-editor file tree drawer to browse and switch files without leaving the editor
+* Multi-select for bulk operations: share, copy, cut, move and delete
+* Recursive search across the whole tree, with quick-filter chips for file types
+* Pin files and folders to the top
+* File inspector showing path, size, lines, characters and quick path copy
+* Conflict resolution dialog: skip, replace or keep both
+
+Code execution
+
+* Run Python, C and Go code directly on the device via Termux
+* Integrated terminal console with real-time output, command history and timing
+
+Preview
+
+* Markdown preview with rendered tables, task lists and syntax-highlighted code blocks
+
+Appearance
+
+* Pure true-black dark theme
+
+Alchemy IDE is free software under the GNU GPL v3.0, and it always will be.
