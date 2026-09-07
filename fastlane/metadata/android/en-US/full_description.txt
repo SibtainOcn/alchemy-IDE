@@ -1,4 +1,4 @@
-Alchemy IDE is a code editor and file manager for writing and managing code on Android. It runs natively, needs no server, and works entirely on the device.
+Alchemy IDE is a native code editor and file manager built for writing and managing code directly on Android — designed to be simple enough for students learning to code on their phone, while staying capable enough for everyday development work. It runs natively, needs no server, and works entirely on the device.
 
 Editing
 
@@ -34,4 +34,7 @@ Appearance
 
 * Pure true-black dark theme
 
+Whether you're a student writing your first Python script between classes or a developer who wants a lightweight editor for quick edits on the go, Alchemy IDE keeps the workflow simple and distraction-free.
+
 Alchemy IDE is free software under the GNU GPL v3.0, and it always will be.
+
